@@ -45,6 +45,7 @@ def process_and_save(file_path, vec, selected_feature_names, save_folder):
     data = load_pickle_fast(file_path)
     X = data['json_features'].values
     y = np.array(data['label'])
+    data['year-month'] = data['dex_date'].dt.to_period('M').astype(str)
     t = np.array(data['year-month'])
 
     print(f"Processing: {file_path}, Shape: {len(X)}")
@@ -113,6 +114,7 @@ def load_training_set(sample_size=None):
             df_train.append(data)
     
     df_train = pd.concat(df_train)
+    df_train['year-month'] = df_train['dex_date'].dt.to_period('M').astype(str)
     print(f"Total training samples: {df_train.shape[0]}")
 
     return df_train
@@ -324,8 +326,7 @@ def generate_selector(method='linearsvc', n_features=10000, batch_size=10000):
 
 
 if __name__ == '__main__':
-    # generate_selector()
-    df_train = load_training_set()
-    print(df_train.head())
+    generate_selector()
+
 
     

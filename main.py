@@ -25,9 +25,9 @@ import utils
 import t_stability as ts
 
 
-data_folder = "/root/malware/processed_features"
-result_folder = "/root/malware/ELSA/results"
-save_folder = "/root/malware/ELSA/checkpoints"
+data_folder = "/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/dataset/processed_features/"
+result_folder = "/cs/academic/phd3/xinrzhen/xinran/SaTML/results"
+save_folder = "/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/ckpt"
 
 test_list_1 = ['2020-01', '2020-02', '2020-03', '2020-04', '2020-05', '2020-06', '2020-07', '2020-08', '2020-09', '2020-10', '2020-11', '2020-12']
 test_list_2 = ['2020-07', '2020-08', '2020-09', '2020-10', '2020-11', '2020-12', '2021-01', '2021-02', '2021-03', '2021-04', '2021-05', '2021-06']
