@@ -20,12 +20,11 @@ from concurrent.futures import ThreadPoolExecutor
 import argparse
 import time
 
-train_feature_folder = '/root/malware/train_features'
-test_feature_folder_1 = '/root/malware/test_features_round_1'
-test_feature_folder_2 = '/root/malware/test_features_round_2'
-test_feature_folder_3 = '/root/malware/test_features_round_3'
-test_feature_folder_4 = '/root/malware/test_features_round_4'
-save_folder = "/root/malware/processed_features"
+save_folder = "/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/dataset/processed_features"
+dataset_folder = "/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/dataset/combine_drebin"
+
+if not os.path.exists(save_folder):
+    os.makedirs(save_folder)
 
 def load_pickle_fast(path):
     return joblib.load(path)
@@ -99,11 +98,11 @@ def process_and_save(file_path, vec, selected_feature_names, save_folder):
 
 
 def load_training_set(sample_size=None):
-    train_years = ['2017', '2018', '2019']
+    train_years = ['2014']
     train_months = [f"{m:02d}" for m in range(1, 13)]
 
     train_files = [f"{year}-{month}" for year in train_years for month in train_months]
-    train_paths = [os.path.join(train_feature_folder, f"{name}.pkl") for name in train_files]
+    train_paths = [os.path.join(dataset_folder, f"{name}", f"features.pkl") for name in train_files]
 
     df_train = []
     for path in train_paths:
@@ -166,9 +165,6 @@ def get_feature_selector(method, X_train, y_train, n_features = 10000):
     print(f"Feature selection time: {end_time - start_time:.2f}s")
     
     return selector
-
-
-
 
 def generate_selector(method='linearsvc', n_features=10000, batch_size=10000):
     df_train = load_training_set()
@@ -288,32 +284,48 @@ def generate_selector(method='linearsvc', n_features=10000, batch_size=10000):
         pickle.dump({'X': X_train_selected, 'y': y_train, 't': t_train}, f)
 
     # Process test data using the SAME vectorizer and feature names
-    test_rounds = {
-        "test_features_round_1": ['2020-01', '2020-02', '2020-03', '2020-04', '2020-05', '2020-06',
-                                '2020-07', '2020-08', '2020-09', '2020-10', '2020-11', '2020-12'],
-        "test_features_round_2": ['2020-07', '2020-08', '2020-09', '2020-10', '2020-11', '2020-12',
-                                '2021-01', '2021-02', '2021-03', '2021-04', '2021-05', '2021-06'],
-        "test_features_round_3": ['2021-01', '2021-02', '2021-03', '2021-04', '2021-05', '2021-06',
-                                '2021-07', '2021-08', '2021-09', '2021-10', '2021-11', '2021-12'],
-        "test_features_round_4": ['2021-07', '2021-08', '2021-09', '2021-10', '2021-11', '2021-12',
-                                '2022-01', '2022-02', '2022-03', '2022-04', '2022-05', '2022-06']
-    }
+    # test_rounds = {
+    #     "test_features_round_1": ['2020-01', '2020-02', '2020-03', '2020-04', '2020-05', '2020-06',
+    #                             '2020-07', '2020-08', '2020-09', '2020-10', '2020-11', '2020-12'],
+    #     "test_features_round_2": ['2020-07', '2020-08', '2020-09', '2020-10', '2020-11', '2020-12',
+    #                             '2021-01', '2021-02', '2021-03', '2021-04', '2021-05', '2021-06'],
+    #     "test_features_round_3": ['2021-01', '2021-02', '2021-03', '2021-04', '2021-05', '2021-06',
+    #                             '2021-07', '2021-08', '2021-09', '2021-10', '2021-11', '2021-12'],
+    #     "test_features_round_4": ['2021-07', '2021-08', '2021-09', '2021-10', '2021-11', '2021-12',
+    #                             '2022-01', '2022-02', '2022-03', '2022-04', '2022-05', '2022-06']
+    # }
 
-    for folder, test_files in test_rounds.items():
-        print(f"Processing test folder: {folder}")
-        save_folder_test = os.path.join(save_folder, f"{folder}")
-        os.makedirs(save_folder_test, exist_ok=True)
+    # for folder, test_files in test_rounds.items():
+    #     print(f"Processing test folder: {folder}")
+    #     save_folder_test = os.path.join(save_folder, f"{folder}")
+    #     os.makedirs(save_folder_test, exist_ok=True)
         
-        test_paths = [os.path.join('/root/malware/', folder, f"{name}.pkl") for name in test_files]
-        for path in tqdm(test_paths):
-            if os.path.exists(path):
-                # Use the same vectorizer and feature names in the SAME ORDER
-                process_and_save(path, vec, selected_feature_names, save_folder_test)
+    #     test_paths = [os.path.join('/root/malware/', folder, f"{name}.pkl") for name in test_files]
+    #     for path in tqdm(test_paths):
+    #         if os.path.exists(path):
+    #             # Use the same vectorizer and feature names in the SAME ORDER
+    #             process_and_save(path, vec, selected_feature_names, save_folder_test)
 
+    months = ['2015-01', '2015-02', '2015-03', '2015-04', '2015-05', '2015-06', '2015-07', '2015-08', '2015-09', '2015-10', '2015-11', '2015-12',
+                '2016-01', '2016-02', '2016-03', '2016-04', '2016-05', '2016-06', '2016-07', '2016-08', '2016-09', '2016-10', '2016-11', '2016-12',
+                '2017-01', '2017-02', '2017-03', '2017-04', '2017-05', '2017-06', '2017-07', '2017-08', '2017-09', '2017-10', '2017-11', '2017-12',
+                '2018-01', '2018-02', '2018-03', '2018-04', '2018-05', '2018-06', '2018-07', '2018-08', '2018-09', '2018-10', '2018-11', '2018-12',
+                '2019-01', '2019-02', '2019-03', '2019-04', '2019-05', '2019-06', '2019-07', '2019-08', '2019-09', '2019-10', '2019-11', '2019-12',
+                '2020-01', '2020-02', '2020-03', '2020-04', '2020-05', '2020-06', '2020-07', '2020-08', '2020-09', '2020-10', '2020-11', '2020-12',
+                '2021-01', '2021-02', '2021-03', '2021-04', '2021-05', '2021-06', '2021-07', '2021-08', '2021-09', '2021-10', '2021-11', '2021-12',
+                '2022-01', '2022-02', '2022-03', '2022-04', '2022-05', '2022-06', '2022-07', '2022-08', '2022-09', '2022-10', '2022-11', '2022-12',
+                '2023-01', '2023-02', '2023-03', '2023-04', '2023-05', '2023-06', '2023-07', '2023-08', '2023-09', '2023-10', '2023-11', '2023-12']
+    
+    for month in months:
+        print(f"Processing {month}")
+        test_paths = os.path.join(dataset_folder, f"{month}", "features.pkl")
+        save_path = os.path.join(save_folder, f"{month}.pkl")
+        process_and_save(test_paths, vec, selected_feature_names, save_path)
 
 
 if __name__ == '__main__':
-    generate_selector()
-
+    # generate_selector()
+    df_train = load_training_set()
+    print(df_train.head())
 
     
