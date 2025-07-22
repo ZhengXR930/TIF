@@ -6,6 +6,7 @@ import numpy as np
 from datetime import datetime
 import os
 from loss import MPL
+from loss_mpc import PALSoftWithInterMargin
 
 
 class CustomDataset(Dataset):
@@ -33,20 +34,33 @@ class CustomDataset(Dataset):
         return self.X[idx], self.y[idx]
 
 class ModelTrainer:
-    def __init__(self, model, device='cuda', batch_size=64, learning_rate=0.001, save_dir='models'):
+    def __init__(self, model, device='cuda', batch_size=64, learning_rate=0.0001, con_loss_weight=0.0, save_dir='models'):
         self.device = device
         self.model = model.to(device)
         self.batch_size = batch_size
         self.learning_rate = learning_rate
         self.save_dir = save_dir
         self.best_f1 = 0
+        self.con_loss_weight = con_loss_weight
         
         if not os.path.exists(save_dir):
             os.makedirs(save_dir)
         
         self.criterion = nn.CrossEntropyLoss()
-        self.custom_loss = MPL(device=device)
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=learning_rate)
+        self.custom_loss = PALSoftWithInterMargin(
+                device=device,
+                input_dim=model.emb_dim,
+                embed_dim=128,
+                num_classes=2,
+                n_proxy=5,
+                tau=0.2,
+                margin=1.5,
+                lambda_margin=0.05,
+                lambda_div=0.01
+            ).to(device)
+        self.optimizer = torch.optim.Adam(
+            list(model.parameters()) + list(self.custom_loss.parameters()), lr=self.learning_rate
+        )
         
     def create_dataloaders(self, X_train, X_val, y_train, y_val):
         train_dataset = CustomDataset(X_train, y_train)
@@ -88,8 +102,7 @@ class ModelTrainer:
         return metrics
     
     def save_model(self, epoch, metrics,model):
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename = f'model_epoch{epoch}_lr{self.learning_rate}_bs{self.batch_size}_f1_{metrics["f1"]:.3f}_{timestamp}.pt'
+        filename = f'model_epoch{epoch}_lr{self.learning_rate}_bs{self.batch_size}.pt'
         path = os.path.join(self.save_dir, filename)
         
         torch.save({
@@ -119,20 +132,18 @@ class ModelTrainer:
                 
                 self.optimizer.zero_grad()
                 outputs, features = self.model(inputs)
-                loss = self.criterion(outputs, labels)
-                # loss = self.criterion(outputs, labels) + self.custom_loss(features, labels)
-                cls_loss = self.criterion(outputs, labels).item()
-                con_loss = 0
-                # con_loss = self.custom_loss(features, labels).item()
+                cls_loss = self.criterion(outputs, labels)
+                con_loss = self.custom_loss(features, labels)
+                loss = cls_loss + con_loss * self.con_loss_weight
                 loss.backward()
                 self.optimizer.step()
                 
                 total_loss += loss.item()
 
                 if step % interval == 0:
-                    print(f"Epoch {epoch+1}/{epochs}, Step {step}/{len(train_loader)},Classification Loss: {cls_loss:.4f}, Contrastive Loss: {con_loss:.4f}")
+                    print(f"Epoch {epoch+1}/{epochs}, Step {step}/{len(train_loader)}, Loss: {loss.item():.4f},Cls_loss: {cls_loss.item():.4f},Con_loss: {con_loss.item():.4f}")
+
                 step += 1
- 
             # Evaluate after each epoch
             train_metrics = self.evaluate(train_loader)
             val_metrics = self.evaluate(val_loader)
@@ -157,7 +168,7 @@ class ModelTrainer:
 
     @staticmethod
     def load_model(model_path, model_class, input_size, device='cuda'):
-        checkpoint = torch.load(model_path, map_location=device)
+        checkpoint = torch.load(model_path, map_location=device, weights_only=True)
         model = model_class(input_size=input_size)
         model.load_state_dict(checkpoint['model_state_dict'])
         model = model.to(device)

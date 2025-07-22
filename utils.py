@@ -6,6 +6,63 @@ import os
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 from datetime import datetime
+from torch.utils.data import Sampler
+
+
+class BalancedEnvSampler(Sampler):
+    def __init__(self, dataset, batch_size):
+        self.env_labels = dataset.envs.numpy()
+        self.env_indices = {
+            env: np.where(self.env_labels == env)[0].tolist()
+            for env in np.unique(self.env_labels)
+        }
+        self.envs = list(self.env_indices.keys())
+        self.num_envs = len(self.envs)
+        self.batch_size = batch_size
+
+        base = batch_size // self.num_envs
+        extra = batch_size % self.num_envs
+        self.samples_per_env_per_batch = {
+            env: base + (1 if i < extra else 0)
+            for i, env in enumerate(self.envs)
+        }
+
+        self._initialize_indices()
+
+    def _initialize_indices(self):
+        self.env_sampling_pools = {}
+        for env, indices in self.env_indices.items():
+            np.random.shuffle(indices)
+            self.env_sampling_pools[env] = indices.copy()
+
+    def _get_samples_from_env(self, env, num_samples):
+        # if the env has less than num_samples, shuffle the env and reset the pool
+        if len(self.env_sampling_pools[env]) < num_samples:
+            np.random.shuffle(self.env_indices[env])
+            self.env_sampling_pools[env] = self.env_indices[env].copy()
+
+        selected = self.env_sampling_pools[env][:num_samples]
+        self.env_sampling_pools[env] = self.env_sampling_pools[env][num_samples:]
+        return selected
+
+    def __iter__(self):
+        self._initialize_indices()
+        total_indices = []
+        num_batches = len(self)
+
+        for _ in range(num_batches):
+            batch = []
+            for env in self.envs:
+                n = self.samples_per_env_per_batch[env]
+                batch.extend(self._get_samples_from_env(env, n))
+            np.random.shuffle(batch)
+            total_indices.extend(batch)
+
+        return iter(total_indices)
+
+    def __len__(self):
+        total_samples = sum(len(indices) for indices in self.env_indices.values())
+        return total_samples // self.batch_size
 
 def load_single_month_data(file_path):
 
@@ -14,10 +71,11 @@ def load_single_month_data(file_path):
     print(f"keys: {data.keys()}")
     x_data = data['X']
     y_data = data['y']
+    env_data = data['env']
 
-    print(f"X shape: {x_data.shape}, y shape: {y_data.shape}, y distribution: {Counter(y_data)}")
+    print(f"X shape: {x_data.shape}, y shape: {y_data.shape}, y distribution: {Counter(y_data)}, env shape: {env_data.shape}")
 
-    return x_data, y_data
+    return x_data, y_data, env_data
 
 def load_train_data(file_path, chunk_size=10000):
     """
@@ -168,57 +226,44 @@ def generate_month_list():
 
     return month_list
 
-def load_and_process_single_month(file_path, year):
-    x_data, y_data = load_single_month_data(file_path)
+def load_and_process_single_month(file_path, save_folder):
+    x_data, y_data, _ = load_single_month_data(file_path)
     y_data = np.where(y_data == 1, 1, 0)
+    env_data = np.zeros(len(y_data), dtype=int)
 
-    env_value = {'2017': 0, '2018': 1, '2019': 2}[year]
-    env_data = np.full_like(y_data, env_value)
+    print(f"Loaded {file_path.split('/')[-1]} -> X shape: {x_data.shape}, y shape: {y_data.shape}, y distribution: {Counter(y_data)}")
 
-    print(f"Loaded {file_path} -> X shape: {x_data.shape}, y shape: {y_data.shape}, y distribution: {Counter(y_data)}")
+    with open(os.path.join(save_folder, f"{file_path.split('/')[-1]}.pkl"), "wb") as f:
+        pickle.dump({'X': x_data, 'y': y_data, 'env': env_data}, f)
 
     return x_data, y_data, env_data
 
-def allocate_env_label_and_save(data_folder):
-    train_year_list = ['2017', '2018', '2019']
+def allocate_env_label_and_save(data_folder, save_folder):
+    test_year_list = ['2015', '2016', '2017', '2018', '2019', '2020', '2021', '2022', '2023']
     month_list = [f"{i:02d}" for i in range(1, 13)]  
     
     file_paths = [
         (os.path.join(data_folder, f"{year}-{month}.pkl"), year)
-        for year in train_year_list for month in month_list
+        for year in test_year_list for month in month_list
     ]
 
-    all_x_data, all_y_data, all_env_data = [], [], []
-
     with ThreadPoolExecutor(max_workers=8) as executor:
-        results = list(executor.map(lambda args: load_and_process_single_month(*args), file_paths))
+        results = list(executor.map(lambda args: load_and_process_single_month(*args), file_paths, save_folder))
 
-    for x_data, y_data, env_data in results:
-        all_x_data.append(x_data)
-        all_y_data.append(y_data)
-        all_env_data.append(env_data)
-
-
-    all_x_data = np.vstack(all_x_data)  
-    all_y_data = np.hstack(all_y_data)  
-    all_env_data = np.hstack(all_env_data)
-
-    print(f"Final X shape: {all_x_data.shape}, y shape: {all_y_data.shape}, env shape: {all_env_data.shape}")
-
-    save_path = os.path.join(data_folder, "all_train_features_with_env.pkl")
-    with open(save_path, "wb") as f:
-        pickle.dump({
-            'X': all_x_data,
-            'y': all_y_data,
-            'env': all_env_data
-        }, f)
-
-    print(f"Data saved to {save_path}")
-
-
-def get_train_dataset_envs(train_data_path, type='year'):
-    with open(train_data_path, 'rb') as f:
+def load_train_overall(train_path):
+    with open(train_path, 'rb') as f:
         data = pickle.load(f)
+    x_data = data['X']
+    y_data = data['y']
+    env_data = data['env']
+    t_data = data['t']
+
+    print(f"x_data shape: {x_data.shape}, y_data shape: {y_data.shape}, env_data shape: {env_data.shape}, t_data shape: {t_data.shape}")
+    print(f"distribution of y_data: {Counter(y_data)}, distribution of env_data: {Counter(env_data)}")
+
+    return x_data, y_data, env_data, t_data 
+    
+def get_train_dataset_envs(data, type='quarter'):
     x_data = data['X']
     y_data = data['y']
     t_data = data['t']
@@ -246,7 +291,8 @@ def get_train_dataset_envs(train_data_path, type='year'):
     else:
         raise ValueError("Invalid type. Choose from 'year', 'month', or 'quarter'.")
 
+    print(f"distribution of envs: {Counter(envs)}")
 
-    x_train, x_val, y_train, y_val, env_train, env_val = train_test_split(x_data, y_data, envs, test_size=0.2, random_state=42, stratify=y_data)
+    x_train, x_val, y_train, y_val, env_train, env_val, t_train, t_val = train_test_split(x_data, y_data, envs, t_data, test_size=0.2, random_state=42, stratify=y_data)
 
-    return x_train, x_val, y_train, y_val, env_train, env_val
+    return x_train, x_val, y_train, y_val, env_train, env_val, t_train, t_val

@@ -10,6 +10,7 @@ from torch.utils.data import Sampler
 from collections import Counter
 import torch.nn.functional as F
 from scipy import sparse
+from utils import BalancedEnvSampler
 
 class Stg2CustomDataset(Dataset):
     def __init__(self, X, y, env):
@@ -28,60 +29,7 @@ class Stg2CustomDataset(Dataset):
     
     def __getitem__(self, idx):
         return self.X[idx], self.y[idx], self.envs[idx]
-
-class BalancedUniformEnvSampler(Sampler):
-    def __init__(self, dataset, batch_size):
-        self.env_labels = dataset.envs.numpy()  
-        self.sample_labels = dataset.y.numpy()  
-        
-        self.env_indices = {env: np.where(self.env_labels == env)[0].tolist()
-                            for env in np.unique(self.env_labels)}
-        
-        self.num_envs = len(self.env_indices)
-        self.batch_size = batch_size
-        
-        self.env_batch_ratios = {env: len(indices) / sum(len(i) for i in self.env_indices.values())
-                                 for env, indices in self.env_indices.items()}
-        
-        self.samples_per_env_per_batch = {env: max(1, int(self.env_batch_ratios[env] * self.batch_size))
-                                          for env in self.env_indices}
-
-        self._initialize_indices()
-
-    def _initialize_indices(self):
-        self.env_sampling_pools = {}
-        for env, indices in self.env_indices.items():
-            np.random.shuffle(indices)  # 重新打乱数据
-            self.env_sampling_pools[env] = indices.copy()  # 确保数据不会被修改
-
-    def _get_samples_from_env(self, env, num_samples):
-        if len(self.env_sampling_pools[env]) < num_samples:
-            np.random.shuffle(self.env_indices[env])  
-            self.env_sampling_pools[env] = self.env_indices[env].copy()
-
-        selected_samples = self.env_sampling_pools[env][:num_samples]
-        self.env_sampling_pools[env] = self.env_sampling_pools[env][num_samples:]  
-        return selected_samples
-    
-    def __iter__(self):
-        self._initialize_indices()  
-        total_indices = []
-        num_batches = len(self)  
-        
-        for _ in range(num_batches):
-            batch_indices = []
-            for env in self.env_indices:
-                num_samples = self.samples_per_env_per_batch[env]
-                batch_indices.extend(self._get_samples_from_env(env, num_samples))
-            
-            np.random.shuffle(batch_indices)
-            total_indices.extend(batch_indices)
-        
-        return iter(total_indices)
-    
-    def __len__(self):
-        total_samples = sum(len(indices) for indices in self.env_indices.values())
-        return total_samples // self.batch_size  
+ 
 
 class St2ModelTrainer:
     def __init__(self, model, device='cuda', batch_size=64, learning_rate=0.001, save_dir='models'):
@@ -108,7 +56,7 @@ class St2ModelTrainer:
         train_dataset = Stg2CustomDataset(X_train, y_train,env_train)
         val_dataset = Stg2CustomDataset(X_val, y_val,env_val)
 
-        sampler = BalancedUniformEnvSampler(train_dataset, self.batch_size)
+        sampler = BalancedEnvSampler(train_dataset, self.batch_size)
 
         train_loader = DataLoader(train_dataset, batch_size=self.batch_size, sampler=sampler)
         val_loader = DataLoader(val_dataset, batch_size=self.batch_size)

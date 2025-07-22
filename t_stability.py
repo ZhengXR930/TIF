@@ -17,9 +17,9 @@ import pickle
 from sklearn.metrics import hinge_loss
 
 
-data_folder = "/root/malware/processed_features"
-save_folder = "/root/malware/ELSA/checkpoints"
-result_folder = "/root/malware/ELSA/results"
+data_folder = "/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/dataset/processed_features"
+save_folder = "/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/ckpt"
+result_folder = "/cs/academic/phd3/xinrzhen/xinran/SaTML/results"
 
 
 def load_feature_names():
@@ -29,7 +29,7 @@ def load_feature_names():
     return feature_names
 
 def creat_t_stability():
-    train_path = os.path.join(data_folder, "all_train_features.pkl")
+    train_path = os.path.join(data_folder, "train_data.pkl")
     with open(train_path, 'rb') as f:
         data = pickle.load(f)
     print(f"keys: {data.keys()}")

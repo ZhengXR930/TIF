@@ -19,6 +19,7 @@ from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 import argparse
 import time
+from sklearn.model_selection import train_test_split
 
 save_folder = "/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/dataset/processed_features"
 dataset_folder = "/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/dataset/combine_drebin"
@@ -37,7 +38,7 @@ def ensure_sparse(X):
         X = csr_matrix(X)
     return X
 
-def process_and_save(file_path, vec, selected_feature_names, save_folder):
+def process_and_save(file_path, vec, selected_feature_names, save_path):
 
     if not os.path.exists(file_path):
         return
@@ -47,6 +48,7 @@ def process_and_save(file_path, vec, selected_feature_names, save_folder):
     y = np.array(data['label'])
     data['year-month'] = data['dex_date'].dt.to_period('M').astype(str)
     t = np.array(data['year-month'])
+    env = np.zeros(len(y), dtype=int)
 
     print(f"Processing: {file_path}, Shape: {len(X)}")
 
@@ -86,12 +88,12 @@ def process_and_save(file_path, vec, selected_feature_names, save_folder):
     if actual_features != expected_features:
         print(f"WARNING: Feature count mismatch! Expected {expected_features}, got {actual_features}")
     
-    base_name = os.path.basename(file_path)
-    save_path = os.path.join(save_folder, base_name)
-    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    # base_name = os.path.basename(file_path)
+    # save_path = os.path.join(save_folder, base_name)
+    # os.makedirs(os.path.dirname(save_path), exist_ok=True)
 
     # Save data as pickle with sparse matrix
-    result = {'X': X_selected, 'y': y, 't': t}
+    result = {'X': X_selected, 'y': y, 't': t, 'env': env}
     with open(save_path, 'wb') as f:
         pickle.dump(result, f)
 
@@ -212,6 +214,9 @@ def generate_selector(method='linearsvc', n_features=10000, batch_size=10000):
     # IMPORTANT: Save the vectorizer BEFORE applying any feature selection
     # We need to apply the SAME vectorization to test data
     joblib.dump(vec, os.path.join(save_folder, f'vectorizer_{method}.pkl'))
+
+    selector_path = os.path.join(save_folder, f'selector_{method}.pkl')
+    selected_features_path = os.path.join(save_folder, f'selected_features_{method}.txt')
     
     # Step 2: Apply feature selection on the VECTORIZED data
     print(f"Applying feature selection using {method}...")
@@ -220,10 +225,19 @@ def generate_selector(method='linearsvc', n_features=10000, batch_size=10000):
         # No feature selection - keep all features
         selected_feature_names = all_feature_names
         X_train_selected = X_train_vectorized
+    elif os.path.exists(selector_path) and os.path.exists(selected_features_path):
+        print(f"Loading existing selector and selected features for method '{method}'...")
+        selector = joblib.load(selector_path)
+        with open(selected_features_path, 'r') as f:
+            selected_feature_names = [line.strip() for line in f.readlines()]
+        name_to_index = {name: idx for idx, name in enumerate(all_feature_names)}
+        selected_indices = [name_to_index[name] for name in selected_feature_names if name in name_to_index]
+        X_train_selected = X_train_vectorized[:, selected_indices]
+        X_train_selected = ensure_sparse(X_train_selected)
     else:
-        # Use the appropriate feature selector
+        print(f"Applying feature selection using {method}...")
         selector = get_feature_selector(method, X_train_vectorized, y_train, n_features)
-        
+
         if hasattr(selector, 'get_support'):
             # Get a boolean mask of selected features
             feature_mask = selector.get_support()
@@ -279,34 +293,20 @@ def generate_selector(method='linearsvc', n_features=10000, batch_size=10000):
         for feature in selected_feature_names:
             f.write(f"{feature}\n")
     
+    print(f"Selected {len(selected_feature_names)} features")
     print(f"Final matrix shape: {X_train_selected.shape}")
 
-    # Save final training data
-    with open(os.path.join(save_folder, f'all_train_features.pkl'), 'wb') as f:
-        pickle.dump({'X': X_train_selected, 'y': y_train, 't': t_train}, f)
+    year_month_train = np.array([datetime.strptime(t, "%Y-%m") for t in t_train])
+    envs_train = (np.array([date.month for date in year_month_train]) - 1) // 3
+    
+    X_train_split, X_val_split, y_train_split, y_val_split, envs_train_split, envs_val_split, t_train_split, t_val_split = train_test_split(
+        X_train_selected, y_train, envs_train, t_train, test_size=0.2, random_state=42, stratify=y_train
+    )
 
-    # Process test data using the SAME vectorizer and feature names
-    # test_rounds = {
-    #     "test_features_round_1": ['2020-01', '2020-02', '2020-03', '2020-04', '2020-05', '2020-06',
-    #                             '2020-07', '2020-08', '2020-09', '2020-10', '2020-11', '2020-12'],
-    #     "test_features_round_2": ['2020-07', '2020-08', '2020-09', '2020-10', '2020-11', '2020-12',
-    #                             '2021-01', '2021-02', '2021-03', '2021-04', '2021-05', '2021-06'],
-    #     "test_features_round_3": ['2021-01', '2021-02', '2021-03', '2021-04', '2021-05', '2021-06',
-    #                             '2021-07', '2021-08', '2021-09', '2021-10', '2021-11', '2021-12'],
-    #     "test_features_round_4": ['2021-07', '2021-08', '2021-09', '2021-10', '2021-11', '2021-12',
-    #                             '2022-01', '2022-02', '2022-03', '2022-04', '2022-05', '2022-06']
-    # }
-
-    # for folder, test_files in test_rounds.items():
-    #     print(f"Processing test folder: {folder}")
-    #     save_folder_test = os.path.join(save_folder, f"{folder}")
-    #     os.makedirs(save_folder_test, exist_ok=True)
-        
-    #     test_paths = [os.path.join('/root/malware/', folder, f"{name}.pkl") for name in test_files]
-    #     for path in tqdm(test_paths):
-    #         if os.path.exists(path):
-    #             # Use the same vectorizer and feature names in the SAME ORDER
-    #             process_and_save(path, vec, selected_feature_names, save_folder_test)
+    with open(os.path.join(save_folder, f'train_data.pkl'), 'wb') as f:
+        pickle.dump({'X': X_train_split, 'y': y_train_split, 't': t_train_split, 'env': envs_train_split}, f)
+    with open(os.path.join(save_folder, f'val_data.pkl'), 'wb') as f:
+        pickle.dump({'X': X_val_split, 'y': y_val_split, 't': t_val_split, 'env': envs_val_split}, f)
 
     months = ['2015-01', '2015-02', '2015-03', '2015-04', '2015-05', '2015-06', '2015-07', '2015-08', '2015-09', '2015-10', '2015-11', '2015-12',
                 '2016-01', '2016-02', '2016-03', '2016-04', '2016-05', '2016-06', '2016-07', '2016-08', '2016-09', '2016-10', '2016-11', '2016-12',
@@ -324,9 +324,42 @@ def generate_selector(method='linearsvc', n_features=10000, batch_size=10000):
         save_path = os.path.join(save_folder, f"{month}.pkl")
         process_and_save(test_paths, vec, selected_feature_names, save_path)
 
+    # check
+    # load train data
+    with open(os.path.join(save_folder, f'train_data.pkl'), 'rb') as f:
+        train_data = pickle.load(f)
+    print(f"train data shape: {train_data['X'].shape}, {train_data['y'].shape}, {train_data['env'].shape}, {train_data['t'].shape}")
+    # load val data
+    with open(os.path.join(save_folder, f'val_data.pkl'), 'rb') as f:
+        val_data = pickle.load(f)
+    print(f"val data shape: {val_data['X'].shape}, {val_data['y'].shape}, {val_data['env'].shape}, {val_data['t'].shape}")
+    # load test data
+    with open(os.path.join(save_folder, f'2021-03.pkl'), 'rb') as f:
+        test_data = pickle.load(f)
+    print(f"test data shape: {test_data['X'].shape}, {test_data['y'].shape}, {test_data['env'].shape}, {test_data['t'].shape}")
+
 
 if __name__ == '__main__':
-    generate_selector()
+    # generate_selector()
+    # with open(os.path.join("/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/dataset/processed_features", f'2021-01.pkl'), 'rb') as f:
+    #     test_data = pickle.load(f)
+    # print(f"test data shape: {test_data['X'].shape}, {test_data['y'].shape}, {test_data['env'].shape}, {test_data['t'].shape}")
+    # load train data
+    with open(os.path.join(save_folder, f'train_data.pkl'), 'rb') as f:
+        train_data = pickle.load(f)
+    print(f"train data shape: {train_data['X'].shape}, {train_data['y'].shape}, {train_data['env'].shape}, {train_data['t'].shape}")
+    print(f"distribution of train data: {Counter(train_data['y']), Counter(train_data['env'])}")
+    # load val data
+    with open(os.path.join(save_folder, f'val_data.pkl'), 'rb') as f:
+        val_data = pickle.load(f)
+    print(f"val data shape: {val_data['X'].shape}, {val_data['y'].shape}, {val_data['env'].shape}, {val_data['t'].shape}")
+    print(f"distribution of val data: {Counter(val_data['y']), Counter(val_data['env'])}")
+    # load test data
+    with open(os.path.join(save_folder, f'2021-03.pkl'), 'rb') as f:
+        test_data = pickle.load(f)
+    print(f"test data shape: {test_data['X'].shape}, {test_data['y'].shape}, {test_data['env'].shape}, {test_data['t'].shape}")
+    print(f"distribution of test data: {Counter(test_data['y']), Counter(test_data['env'])}")
+
 
 
     

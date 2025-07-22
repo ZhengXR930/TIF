@@ -17,27 +17,27 @@ class DrebinMLP(nn.Module):
     ):
         super(DrebinMLP, self).__init__()
         self.emb_dim = 200
-        # self.encoder_model = nn.Sequential(
-        #     nn.Linear(input_size, 200),
-        #     nn.ReLU(),
-        #     nn.Dropout(0.5),
-        #     nn.Linear(200, self.emb_dim),
-        #     nn.ReLU(),
-        #     nn.Dropout(0.5),
-        # )
         self.encoder_model = nn.Sequential(
-            nn.Linear(input_size, 512),
-            nn.BatchNorm1d(512),
+            nn.Linear(input_size, 200),
             nn.ReLU(),
             nn.Dropout(0.5),
-            nn.Linear(512, 256),
-            nn.BatchNorm1d(256),
+            nn.Linear(200, self.emb_dim),
             nn.ReLU(),
             nn.Dropout(0.5),
-            nn.Linear(256, self.emb_dim),
-            nn.LayerNorm(self.emb_dim),
-            nn.ReLU(),
         )
+        # self.encoder_model = nn.Sequential(
+        #     nn.Linear(input_size, 512),
+        #     nn.BatchNorm1d(512),
+        #     nn.ReLU(),
+        #     nn.Dropout(0.5),
+        #     nn.Linear(512, 256),
+        #     nn.BatchNorm1d(256),
+        #     nn.ReLU(),
+        #     nn.Dropout(0.5),
+        #     nn.Linear(256, self.emb_dim),
+        #     nn.LayerNorm(self.emb_dim),
+        #     nn.ReLU(),
+        # )
         
         self.mlp_model = nn.Linear(self.emb_dim, output_size)
         self.pred = nn.Softmax(dim=1)

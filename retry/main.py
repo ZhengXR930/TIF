@@ -15,6 +15,8 @@ from loss import PALSoftWithInterMargin
 from sklearn.manifold import TSNE
 import matplotlib.pyplot as plt
 import umap
+import pickle
+from scipy.sparse import csr_matrix
 
 # Set random seeds for reproducibility
 def set_seed(seed=42):
@@ -97,7 +99,7 @@ def train_nn(model, X_train, y_train, check_point, lr=0.0001, epochs=30, batch_s
             logits = logits.squeeze(-1)
             loss_bn = criterion_bn(logits, yb)
             loss_con = criterion_con(feature, yb)
-            loss = loss_bn + loss_con
+            loss = loss_bn + loss_con * 0.0
             # loss = loss_bn
             # print(f"Loss: {loss.item()}, Loss_bn: {loss_bn.item()}, Loss_con: {loss_con.item()}")
             loss.backward()
@@ -150,8 +152,14 @@ def evaluate_monthly(model, start_date, end_date,model_save_path=None):
     month_list = generate_months(start_date, end_date)
     for month in month_list:
         print(f"Evaluating {month}")
-        train_path = f"/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/dataset/data/gen_apigraph_drebin/{month}_selected.npz"
-        X, y_binary, y_family = load_data(train_path)
+        # train_path = f"/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/dataset/data/gen_apigraph_drebin/{month}_selected.npz"
+        # X, y_binary, y_family = load_data(train_path)
+        with open(os.path.join("/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/dataset/processed_features", f"{month}.pkl"), 'rb') as f:
+            data = pickle.load(f)
+        X = data['X']
+        y_binary = data['y']
+        X = csr_matrix(X).todense()
+        print(f"X shape: {X.shape}, y_binary shape: {y_binary.shape}")
         evaluate_nn(model, X, y_binary, model_save_path)
 
 def extract_features(model, dataloader):
@@ -218,14 +226,25 @@ def plot_features(features, labels, title='t-SNE of Features'):
 if __name__ == "__main__":
 
     check_point = "/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/ckpt"
-    train_path = "/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/dataset/data/gen_apigraph_drebin/2012-01to2012-12_selected.npz"
+    # train_path = "/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/dataset/data/gen_apigraph_drebin/2012-01to2012-12_selected.npz"
+    reain_path = "/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/dataset/processed_features/train_data.pkl"
 
     # Load and split data
-    X, y_binary, y_family = load_data(train_path)
+    # X, y_binary, y_family = load_data(train_path)
+    with open(reain_path, 'rb') as f:
+        data = pickle.load(f)
+    X = data['X']
+    y_binary = data['y']
+
+    X = csr_matrix(X).todense()
+    print(f"X shape: {X.shape}, y_binary shape: {y_binary.shape}")
+
+    X_train, X_test, y_train, y_test = train_test_split(X, y_binary, test_size=0.2, random_state=42, stratify=y_binary)
+    
     X_train, X_test, y_train, y_test = train_test_split(X, y_binary, test_size=0.2, random_state=42, stratify=y_binary)
 
     # Define model, optimizer, loss
-    best_model_name = "best_model_con.pth"
+    best_model_name = "best_model_bce.pth"
     model = DrebinMLP(input_size=X.shape[1])
     model_save_path = os.path.join(check_point, best_model_name)
     # model.load_state_dict(torch.load(model_save_path, map_location=device, weights_only=True))
@@ -238,10 +257,10 @@ if __name__ == "__main__":
     # plot_features(sampled_features, sampled_labels, title='learned features bce')
 
     # Train
-    train_nn(model, X_train, y_train, check_point, lr=0.0001, epochs=60, batch_size=256, best_model_name=best_model_name)
+    train_nn(model, X_train, y_train, check_point, lr=0.0001, epochs=30, batch_size=128, best_model_name=best_model_name)
 
     # Evaluate
     evaluate_nn(model, X_test, y_test, model_save_path)
-    # evaluate_monthly(model, "2013-01", "2013-12", model_save_path)
+    evaluate_monthly(model, "2015-01", "2016-12", model_save_path)
 
     

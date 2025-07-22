@@ -29,25 +29,22 @@ def drebin_svm_pred(clf, X_test, y_test):
 
     return precision, recall, f1
 
-def drebin_svm_monthly(clf, results_f1_list,result_folder,data_folder,month_list, file_name):
+def drebin_svm_monthly(clf,result_f1,result_folder,data_folder,month_list,file_name):
     print(f"train Linear SVM and eval in overall test set")
-
-    number = file_name.split('_')[-1]
 
     monthly_results_path = os.path.join(result_folder, f'{file_name}.csv')
     with open(monthly_results_path, 'w') as f:
         f.write("month,precision,recall,f1,aut\n")  
 
-    
     for month in month_list:
         print(f"test month: {month}")
-        file_path = os.path.join(data_folder, f"test_features_round_{number}" ,f"{month}.pkl")
-        x_test, y_test = utils.load_single_month_data(file_path)
+        file_path = os.path.join(data_folder, f"{month}.pkl")
+        x_test, y_test, env_test = utils.load_single_month_data(file_path)
         precision, recall, f1 = drebin_svm_pred(clf, x_test, y_test)
         print(f"test month: {month}, precision: {precision}, recall: {recall}, f1: {f1}")
 
-        results_f1_list.append(f1)
-        m_aut = tm.aut(results_f1_list)
+        result_f1.append(f1)
+        m_aut = tm.aut(result_f1)
 
         with open(monthly_results_path, 'a') as f:
             f.write(f"{month},{precision},{recall},{f1},{m_aut}\n")
