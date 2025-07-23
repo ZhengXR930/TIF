@@ -102,7 +102,7 @@ class ModelTrainer:
         return metrics
     
     def save_model(self, epoch, metrics,model):
-        filename = f'model_epoch{epoch}_lr{self.learning_rate}_bs{self.batch_size}.pt'
+        filename = f'mpc_model_epoch{epoch}_lr{self.learning_rate}_bs{self.batch_size}.pt'
         path = os.path.join(self.save_dir, filename)
         
         torch.save({

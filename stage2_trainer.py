@@ -11,6 +11,7 @@ from collections import Counter
 import torch.nn.functional as F
 from scipy import sparse
 from utils import BalancedEnvSampler
+from loss_mpc import PALSoftWithInterMargin
 
 class Stg2CustomDataset(Dataset):
     def __init__(self, X, y, env):
@@ -32,24 +33,39 @@ class Stg2CustomDataset(Dataset):
  
 
 class St2ModelTrainer:
-    def __init__(self, model, device='cuda', batch_size=64, learning_rate=0.001, save_dir='models'):
+    def __init__(self, model, device='cuda', batch_size=64, learning_rate=0.001, con_loss_weight=1.0, penalty_weight=1.0, save_dir='models'):
         self.device = device
         self.model = model.to(device)
         self.batch_size = batch_size
         self.learning_rate = learning_rate
         self.save_dir = save_dir
         self.best_f1 = 0
-        self.penalty_weight = 10.0
-        
+        self.penalty_weight = penalty_weight
+        self.con_loss_weight = con_loss_weight
+
         if not os.path.exists(save_dir):
             os.makedirs(save_dir)
         
         self.criterion = nn.CrossEntropyLoss()
-        self.custom_loss = MPL(device=device,feat_dim=200)
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=learning_rate, weight_decay=1e-4)
+        self.custom_loss = PALSoftWithInterMargin(
+                device=device,
+                input_dim=model.emb_dim,
+                embed_dim=128,
+                num_classes=2,
+                n_proxy=5,
+                tau=0.2,
+                margin=1.5,
+                lambda_margin=0.05,
+                lambda_div=0.01
+            ).to(device)
+        self.optimizer = torch.optim.Adam(
+            list(self.model.parameters()) + list(self.custom_loss.parameters()), lr=self.learning_rate
+        )
     
     def reset_optimizer(self, learning_rate):
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=learning_rate, weight_decay=1e-4)
+        self.optimizer = torch.optim.Adam(
+            list(self.model.parameters()) + list(self.custom_loss.parameters()), lr=learning_rate
+        )
         print(f"reinitialize optimizer with learning rate {learning_rate}")
         
     def create_dataloaders(self, X_train, X_val, y_train, y_val,env_train,env_val):
@@ -96,7 +112,7 @@ class St2ModelTrainer:
     
     def save_model(self, epoch, metrics):
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename = f'model_epoch{epoch}_lr{self.learning_rate}_bs{self.batch_size}_f1_{metrics["f1"]:.3f}_{timestamp}.pt'
+        filename = f'stage2_model_epoch{epoch}_lr{self.learning_rate}_bs{self.batch_size}.pt'
         path = os.path.join(self.save_dir, filename)
         
         torch.save({
@@ -108,31 +124,37 @@ class St2ModelTrainer:
         
         return path
 
-    def _compute_gradient_penalty(self, logits, label):
-        # IRM alignment
-        if label.dim() >= 2 and label.shape[1] > 1:
-            label = label[:,1]
-        scale = torch.ones_like(logits, requires_grad=True, device=self.device)
-        loss = F.binary_cross_entropy_with_logits(logits * scale, label, reduction='none')
-
-        grad = torch.autograd.grad(loss.sum(), [scale], create_graph=True)[0]
-        # return sum of grad
-        return (grad ** 2).sum()
-        # return (grad ** 2).mean()
+    def _compute_irm_penalty(self, logits, labels, scale):
+        if labels.dim() >= 2 and labels.shape[1] > 1:
+            labels = labels[:, 1]
+        scaled_logits = logits * scale
+        loss = F.binary_cross_entropy_with_logits(scaled_logits, labels, reduction='sum') 
+        # loss = loss.mean()
+        grad = torch.autograd.grad(loss, [scale], create_graph=True)[0]
+        return (grad ** 2).mean()
     
-    def train(self, X_train, X_val, y_train, y_val, env_train, env_val, epochs=50,learning_rate=0.001):
+    def train(self, X_train, X_val, y_train, y_val, env_train, env_val, epochs=50):
         train_loader, val_loader = self.create_dataloaders(X_train, X_val, y_train, y_val, env_train, env_val)
         best_model_path = None
 
         num_envs = len(np.unique(env_train))
 
         interval = 20
-        penalty_weight = self.penalty_weight
+
+        env_scales = [torch.tensor(1.0, requires_grad=True, device=self.device) for _ in range(num_envs)]
         
         for epoch in range(epochs):
             self.model.train()
             total_loss = 0
             step = 0
+
+            if epoch < 5:
+                self.penalty_weight = 0.0
+            elif epoch == 5:
+                self.reset_optimizer(self.learning_rate)
+                self.penalty_weight = 0.01
+            else:
+                self.penalty_weight = 0.01
 
             for inputs, labels, env in train_loader:
                 inputs, labels, env = inputs.to(self.device), labels.to(self.device), env.to(self.device)
@@ -140,40 +162,41 @@ class St2ModelTrainer:
                 self.optimizer.zero_grad()
 
                 features = self.model.encoder_model(inputs)
-                con_loss = self.custom_loss(features, labels)
+                con_loss = self.con_loss_weight * self.custom_loss(features, labels)
+
                 all_env_losses = []
                 all_env_penalties = []
+                total_samples = 0
 
                 for i in range(num_envs):
                     mask = (env == i)
                     if mask.any():
-                        env_inputs = inputs[mask]
                         env_labels = labels[mask]
-
-                        env_features = self.model.encoder_model(env_inputs)
-                        env_outputs = self.model.mlp_model(env_features)
+                        env_features = features[mask]
+                        env_outputs = self.model.pred(self.model.mlp_model(env_features))
                         cls_loss = self.criterion(env_outputs, env_labels)
-                        penalty = self._compute_gradient_penalty(torch.sigmoid(env_outputs)[:, 1], env_labels.float())
+                        scale = env_scales[i]
+                        penalty = self._compute_irm_penalty(env_outputs[:, 1], env_labels.float(), scale)
 
-                        env_loss = cls_loss
+                        n = env_labels.size(0)
+                        env_loss = cls_loss * n
                         all_env_losses.append(env_loss)
                         all_env_penalties.append(penalty)
+                        total_samples += n
 
                 
                 if all_env_losses:
-                    total_env_loss = torch.stack(all_env_losses).mean()
-                    total_penalty = torch.stack(all_env_penalties).mean()
-                    total_loss = total_env_loss + penalty_weight * total_penalty + con_loss
+                    total_env_loss = torch.stack(all_env_losses).sum() / total_samples
+                    total_penalty = torch.stack(all_env_penalties).sum()
+                    total_loss = total_env_loss + self.penalty_weight * total_penalty + con_loss
 
                     total_loss.backward()
                     self.optimizer.step()
 
-                    total_loss += total_env_loss.item()
-
                 if step % interval == 0:
                     print(f"Epoch {epoch+1}/{epochs}, Step {step}/{len(train_loader)}, "
-                        f"Classification Loss: {cls_loss:.4f}, Contrastive Loss: {con_loss:.4f}, "
-                        f"IRM Penalty: {penalty_weight * total_penalty:.4f}")
+                        f"Classification Loss: {cls_loss.item():.4f}, Contrastive Loss: {con_loss.item():.4f}, "
+                        f"IRM Penalty: weight {self.penalty_weight}, penalty {total_penalty.item():.4f}, Total Loss: {total_loss.item():.4f}")
 
                 step += 1
  
@@ -182,7 +205,7 @@ class St2ModelTrainer:
             val_metrics = self.evaluate(val_loader)
             
             print(f"Epoch {epoch+1}/{epochs}")
-            print(f"Training - Loss: {total_loss/len(train_loader):.4f}")
+            print(f"Training - Loss: {total_loss.item()/len(train_loader):.4f}")
             print(f"Training Metrics: {train_metrics}")
             print(f"Validation Metrics: {val_metrics}")
             

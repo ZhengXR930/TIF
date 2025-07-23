@@ -139,7 +139,7 @@ def eval_mpc_stage_1(train_path, test_list, best_model_path=None):
             device='cuda',
             batch_size=256,
             learning_rate=0.0001,
-            con_loss_weight=1.0,
+            con_loss_weight=0.0,
             save_dir=save_folder)
 
         best_model_path = trainer.train(x_train, x_val, y_train, y_val, env_train, env_val, epochs=60)
@@ -187,33 +187,37 @@ def eval_mpc_stage_1(train_path, test_list, best_model_path=None):
 
 
 def eval_mpc_stage_2(train_path, test_list, best_model_path=None):
-    x_train, x_val, y_train, y_val, env_train, env_val = utils.get_train_dataset_envs(train_path, type='year')
+    x_train, y_train, env_train, t_train = utils.load_train_overall(train_path)
+    x_val, y_val, env_val, t_val = utils.load_train_overall(val_path)
     input_size = x_train.shape[1]
 
     if best_model_path is None:
-        model = DrebinMLP(input_size=input_size)
+        model = DrebinMLP_IRM(input_size=input_size)
         trainer = St2ModelTrainer(
             model=model,
             device='cuda',
-            batch_size=1024,
-            learning_rate=0.0005,
+            batch_size=256,
+            learning_rate=0.0001,
+            con_loss_weight=1.0,
+            penalty_weight=0.01,
             save_dir=save_folder)
 
-        best_model_path = trainer.train(x_train, x_val, y_train, y_val, env_train, env_val, epochs=50)
+        best_model_path = trainer.train(x_train, x_val, y_train, y_val, env_train, env_val, epochs=60)
         print(f"best model path: {best_model_path}")
     
     else:
         print(f"load best model from {best_model_path}")
         model = St2ModelTrainer.load_model(
         model_path=best_model_path,
-        model_class=DrebinMLP,
+        model_class=DrebinMLP_IRM,
         input_size=input_size
         )
         trainer = St2ModelTrainer(
             model=model,
             device='cuda',
-            batch_size=1024,
-            learning_rate=0.0005,
+            batch_size=256,
+            learning_rate=0.0001,
+            con_loss_weight=1.0,
             save_dir=save_folder)
     
     val_dataset = Stg2CustomDataset(x_val, y_val, env_val)
@@ -261,8 +265,9 @@ def eval_tif(train_path, test_list, best_stg1_model_path, best_stg2_model_path=N
         trainer = St2ModelTrainer(
             model=model,
             device='cuda',
-            batch_size=1024,
-            learning_rate=0.0005,
+            batch_size=256,
+            learning_rate=0.0001,
+            con_loss_weight=1.0,
             save_dir=save_folder)
 
         trainer.reset_optimizer(learning_rate=0.001)
@@ -393,7 +398,7 @@ if __name__ == "__main__":
     # eval_svm(train_path, val_path, test_list)
 
     # deepdrebin
-    eval_deepdrebin(train_path, test_list, best_model_path=None)
+    # eval_deepdrebin(train_path, test_list, best_model_path=None)
 
     # t-stability
     # eval_t_stability()
@@ -409,8 +414,8 @@ if __name__ == "__main__":
     # eval_mpc_stage_1(train_path, test_list, best_model_path=best_model_path)
 
     # tif:mpc stage 2
-    # best_model_path = None
-    # eval_mpc_stage_2(train_path, best_model_path=best_model_path)
+    best_model_path = None
+    eval_mpc_stage_2(train_path, test_list, best_model_path=best_model_path)
 
     # tif:overall (load stg1 first - reset optimizer - train stg2)
 

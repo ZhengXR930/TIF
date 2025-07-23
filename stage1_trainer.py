@@ -57,7 +57,7 @@ class St1ModelTrainer:
             ).to(device)
 
         self.optimizer = torch.optim.Adam(
-            list(model.parameters()) + list(self.custom_loss.parameters()), lr=self.learning_rate
+            list(self.model.parameters()) + list(self.custom_loss.parameters()), lr=self.learning_rate
         )
         
     def create_dataloaders(self, X_train, X_val, y_train, y_val,env_train,env_val):
@@ -103,7 +103,7 @@ class St1ModelTrainer:
     
     def save_model(self, epoch, metrics,model):
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename = f'model_epoch{epoch}_lr{self.learning_rate}_bs{self.batch_size}.pt'
+        filename = f'stage1_model_epoch{epoch}_lr{self.learning_rate}_bs{self.batch_size}.pt'
         path = os.path.join(self.save_dir, filename)
         
         torch.save({

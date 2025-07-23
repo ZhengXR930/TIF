@@ -36,14 +36,6 @@ class DrebinMLP(nn.Module):
         return x, feature
 
 class DrebinMLP_IRM(nn.Module):
-    """
-    Network architecture used by Grosse et al. in the paper
-    'Adversarial Examples for Malware Detection'
-
-    Modifications (don't change the architecture, only the definition): 
-    * Splitting of the layers into backbone and classifier
-    * Variable output size; target to project to a large-dim output space and train.
-    """
     def __init__(
             self, 
             input_size,
