@@ -23,13 +23,22 @@ from concurrent.futures import ThreadPoolExecutor
 import base_line.drebin as drebin
 import utils
 import t_stability as ts
-
+import torch
+import random
 
 data_folder = "/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/dataset/processed_features/"
 result_folder = "/cs/academic/phd3/xinrzhen/xinran/SaTML/results"
 save_folder = "/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/ckpt"
 
-
+# set seed
+os.environ["PYTHONHASHSEED"] = "1"
+random.seed(1)
+np.random.seed(1)
+torch.manual_seed(1)
+torch.cuda.manual_seed(1)
+torch.cuda.manual_seed_all(1)
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
     
 def eval_svm(train_path, val_path, test_list):
     x_train, y_train, _, _ = utils.load_train_overall(train_path)
@@ -139,7 +148,7 @@ def eval_mpc_stage_1(train_path, test_list, best_model_path=None):
             device='cuda',
             batch_size=256,
             learning_rate=0.0001,
-            con_loss_weight=0.0,
+            con_loss_weight=1.0,
             save_dir=save_folder)
 
         best_model_path = trainer.train(x_train, x_val, y_train, y_val, env_train, env_val, epochs=60)
@@ -248,7 +257,8 @@ def eval_mpc_stage_2(train_path, test_list, best_model_path=None):
 
 
 def eval_tif(train_path, test_list, best_stg1_model_path, best_stg2_model_path=None):
-    x_train, x_val, y_train, y_val, env_train, env_val = utils.get_train_dataset_envs(train_path, type='year')
+    x_train, y_train, env_train, t_train = utils.load_train_overall(train_path)
+    x_val, y_val, env_val, t_val = utils.load_train_overall(val_path)
 
     input_size = x_train.shape[1]
 
@@ -259,7 +269,7 @@ def eval_tif(train_path, test_list, best_stg1_model_path, best_stg2_model_path=N
         print(f"load best stg1 model from {best_stg1_model_path}")
         model = St2ModelTrainer.load_model(
         model_path=best_stg1_model_path,
-        model_class=DrebinMLP,
+        model_class=DrebinMLP_IRM,
         input_size=input_size
         )
         trainer = St2ModelTrainer(
@@ -268,25 +278,28 @@ def eval_tif(train_path, test_list, best_stg1_model_path, best_stg2_model_path=N
             batch_size=256,
             learning_rate=0.0001,
             con_loss_weight=1.0,
+            penalty_weight=0.01,
             save_dir=save_folder)
 
-        trainer.reset_optimizer(learning_rate=0.001)
-        trainer.penalty_weight = 10000.0
+        trainer.reset_optimizer(learning_rate=0.0001)
         best_model_path = trainer.train(x_train, x_val, y_train, y_val, env_train, env_val, epochs=30)
+        print(f"best model path: {best_model_path}")
     
     elif best_stg2_model_path is not None:
 
         print(f"load best stg2 model from {best_stg2_model_path}")
         model = St2ModelTrainer.load_model(
         model_path=best_stg2_model_path,
-        model_class=DrebinMLP,
+        model_class=DrebinMLP_IRM,
         input_size=input_size
         )
         trainer = St2ModelTrainer(
             model=model,
             device='cuda',
-            batch_size=1024,
-            learning_rate=0.0005,
+            batch_size=256,
+            learning_rate=0.0001,
+            con_loss_weight=1.0,
+            penalty_weight=0.01,
             save_dir=save_folder)
 
     val_dataset = Stg2CustomDataset(x_val, y_val, env_val)
@@ -406,18 +419,19 @@ if __name__ == "__main__":
     # mpc
     # eval_mpc(train_path, test_list, best_model_path=None)
 
-    # tif data preparation
-    # utils.get_train_dataset_envs(train_path, type='year')
 
     # tif:mpc stage 1
-    # best_model_path = None
-    # eval_mpc_stage_1(train_path, test_list, best_model_path=best_model_path)
+    best_model_path = None
+    eval_mpc_stage_1(train_path, test_list, best_model_path=best_model_path)
 
     # tif:mpc stage 2
-    best_model_path = None
-    eval_mpc_stage_2(train_path, test_list, best_model_path=best_model_path)
+    # best_model_path = None
+    # eval_mpc_stage_2(train_path, test_list, best_model_path=best_model_path)
 
     # tif:overall (load stg1 first - reset optimizer - train stg2)
+    # best_stg1_model_path = "/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/ckpt/stage1_model_epoch59_lr0.0001_bs256.pt"
+    # best_stg2_model_path = None
+    # eval_tif(train_path, test_list, best_stg1_model_path, best_stg2_model_path)
 
     # best_model_path = "/root/malware/ELSA/checkpoints/model_epoch49_lr0.0005_bs1024_f1_0.966_20250222_110238.pt"
     # eval_tif(train_path, best_stg1_model_path="/root/malware/ELSA/checkpoints/model_epoch46_lr0.0005_bs1024_f1_0.961_20250227_053620.pt", best_stg2_model_path=None)

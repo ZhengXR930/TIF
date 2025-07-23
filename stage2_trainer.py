@@ -129,7 +129,6 @@ class St2ModelTrainer:
             labels = labels[:, 1]
         scaled_logits = logits * scale
         loss = F.binary_cross_entropy_with_logits(scaled_logits, labels, reduction='sum') 
-        # loss = loss.mean()
         grad = torch.autograd.grad(loss, [scale], create_graph=True)[0]
         return (grad ** 2).mean()
     
@@ -147,14 +146,6 @@ class St2ModelTrainer:
             self.model.train()
             total_loss = 0
             step = 0
-
-            if epoch < 5:
-                self.penalty_weight = 0.0
-            elif epoch == 5:
-                self.reset_optimizer(self.learning_rate)
-                self.penalty_weight = 0.01
-            else:
-                self.penalty_weight = 0.01
 
             for inputs, labels, env in train_loader:
                 inputs, labels, env = inputs.to(self.device), labels.to(self.device), env.to(self.device)
@@ -195,7 +186,7 @@ class St2ModelTrainer:
 
                 if step % interval == 0:
                     print(f"Epoch {epoch+1}/{epochs}, Step {step}/{len(train_loader)}, "
-                        f"Classification Loss: {cls_loss.item():.4f}, Contrastive Loss: {con_loss.item():.4f}, "
+                        f"Cls Loss: {cls_loss.item():.4f}, Con Loss: {con_loss.item():.4f}, "
                         f"IRM Penalty: weight {self.penalty_weight}, penalty {total_penalty.item():.4f}, Total Loss: {total_loss.item():.4f}")
 
                 step += 1
@@ -221,7 +212,7 @@ class St2ModelTrainer:
 
     @staticmethod
     def load_model(model_path, model_class, input_size, device='cuda'):
-        checkpoint = torch.load(model_path, map_location=device)
+        checkpoint = torch.load(model_path, map_location=device, weights_only=True)
         model = model_class(input_size=input_size)
         model.load_state_dict(checkpoint['model_state_dict'])
         model = model.to(device)
