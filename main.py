@@ -26,9 +26,9 @@ import t_stability as ts
 import torch
 import random
 
-data_folder = "/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/dataset/processed_features/"
-result_folder = "/cs/academic/phd3/xinrzhen/xinran/SaTML/results"
-save_folder = "/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/ckpt"
+data_folder = "/Users/zhengxinran/Documents/S2LAB/dataset/tif/processed_features/"
+result_folder = "/Users/zhengxinran/Documents/S2LAB/project/IRM/result_rf"
+save_folder = "/Users/zhengxinran/Documents/S2LAB/project/IRM/ckpt"
 
 # set seed
 os.environ["PYTHONHASHSEED"] = "1"
@@ -408,7 +408,7 @@ if __name__ == "__main__":
     train base line models
     """
     # drebin
-    # eval_svm(train_path, val_path, test_list)
+    eval_svm(train_path, val_path, test_list)
 
     # deepdrebin
     # eval_deepdrebin(train_path, test_list, best_model_path=None)
@@ -421,8 +421,8 @@ if __name__ == "__main__":
 
 
     # tif:mpc stage 1
-    best_model_path = None
-    eval_mpc_stage_1(train_path, test_list, best_model_path=best_model_path)
+    # best_model_path = None
+    # eval_mpc_stage_1(train_path, test_list, best_model_path=best_model_path)
 
     # tif:mpc stage 2
     # best_model_path = None
