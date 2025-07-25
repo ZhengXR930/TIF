@@ -21,8 +21,8 @@ import argparse
 import time
 from sklearn.model_selection import train_test_split
 
-save_folder = "/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/dataset/processed_features"
-dataset_folder = "/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/dataset/combine_drebin"
+save_folder = "/Users/zhengxinran/Documents/S2LAB/dataset/tif/processed_features"
+dataset_folder = "/Users/zhengxinran/Documents/S2LAB/dataset/tif/combine_drebin"
 
 if not os.path.exists(save_folder):
     os.makedirs(save_folder)
@@ -296,69 +296,69 @@ def generate_selector(method='linearsvc', n_features=10000, batch_size=10000):
     print(f"Selected {len(selected_feature_names)} features")
     print(f"Final matrix shape: {X_train_selected.shape}")
 
-    year_month_train = np.array([datetime.strptime(t, "%Y-%m") for t in t_train])
-    envs_train = (np.array([date.month for date in year_month_train]) - 1) // 3
+    # year_month_train = np.array([datetime.strptime(t, "%Y-%m") for t in t_train])
+    # envs_train = (np.array([date.month for date in year_month_train]) - 1) // 3
     
-    X_train_split, X_val_split, y_train_split, y_val_split, envs_train_split, envs_val_split, t_train_split, t_val_split = train_test_split(
-        X_train_selected, y_train, envs_train, t_train, test_size=0.2, random_state=42, stratify=y_train
-    )
+    # X_train_split, X_val_split, y_train_split, y_val_split, envs_train_split, envs_val_split, t_train_split, t_val_split = train_test_split(
+    #     X_train_selected, y_train, envs_train, t_train, test_size=0.2, random_state=42, stratify=y_train
+    # )
 
-    with open(os.path.join(save_folder, f'train_data.pkl'), 'wb') as f:
-        pickle.dump({'X': X_train_split, 'y': y_train_split, 't': t_train_split, 'env': envs_train_split}, f)
-    with open(os.path.join(save_folder, f'val_data.pkl'), 'wb') as f:
-        pickle.dump({'X': X_val_split, 'y': y_val_split, 't': t_val_split, 'env': envs_val_split}, f)
+    # with open(os.path.join(save_folder, f'train_data.pkl'), 'wb') as f:
+    #     pickle.dump({'X': X_train_split, 'y': y_train_split, 't': t_train_split, 'env': envs_train_split}, f)
+    # with open(os.path.join(save_folder, f'val_data.pkl'), 'wb') as f:
+    #     pickle.dump({'X': X_val_split, 'y': y_val_split, 't': t_val_split, 'env': envs_val_split}, f)
 
-    months = ['2015-01', '2015-02', '2015-03', '2015-04', '2015-05', '2015-06', '2015-07', '2015-08', '2015-09', '2015-10', '2015-11', '2015-12',
-                '2016-01', '2016-02', '2016-03', '2016-04', '2016-05', '2016-06', '2016-07', '2016-08', '2016-09', '2016-10', '2016-11', '2016-12',
-                '2017-01', '2017-02', '2017-03', '2017-04', '2017-05', '2017-06', '2017-07', '2017-08', '2017-09', '2017-10', '2017-11', '2017-12',
-                '2018-01', '2018-02', '2018-03', '2018-04', '2018-05', '2018-06', '2018-07', '2018-08', '2018-09', '2018-10', '2018-11', '2018-12',
-                '2019-01', '2019-02', '2019-03', '2019-04', '2019-05', '2019-06', '2019-07', '2019-08', '2019-09', '2019-10', '2019-11', '2019-12',
-                '2020-01', '2020-02', '2020-03', '2020-04', '2020-05', '2020-06', '2020-07', '2020-08', '2020-09', '2020-10', '2020-11', '2020-12',
-                '2021-01', '2021-02', '2021-03', '2021-04', '2021-05', '2021-06', '2021-07', '2021-08', '2021-09', '2021-10', '2021-11', '2021-12',
-                '2022-01', '2022-02', '2022-03', '2022-04', '2022-05', '2022-06', '2022-07', '2022-08', '2022-09', '2022-10', '2022-11', '2022-12',
-                '2023-01', '2023-02', '2023-03', '2023-04', '2023-05', '2023-06', '2023-07', '2023-08', '2023-09', '2023-10', '2023-11', '2023-12']
+    # months = ['2015-01', '2015-02', '2015-03', '2015-04', '2015-05', '2015-06', '2015-07', '2015-08', '2015-09', '2015-10', '2015-11', '2015-12',
+    #             '2016-01', '2016-02', '2016-03', '2016-04', '2016-05', '2016-06', '2016-07', '2016-08', '2016-09', '2016-10', '2016-11', '2016-12',
+    #             '2017-01', '2017-02', '2017-03', '2017-04', '2017-05', '2017-06', '2017-07', '2017-08', '2017-09', '2017-10', '2017-11', '2017-12',
+    #             '2018-01', '2018-02', '2018-03', '2018-04', '2018-05', '2018-06', '2018-07', '2018-08', '2018-09', '2018-10', '2018-11', '2018-12',
+    #             '2019-01', '2019-02', '2019-03', '2019-04', '2019-05', '2019-06', '2019-07', '2019-08', '2019-09', '2019-10', '2019-11', '2019-12',
+    #             '2020-01', '2020-02', '2020-03', '2020-04', '2020-05', '2020-06', '2020-07', '2020-08', '2020-09', '2020-10', '2020-11', '2020-12',
+    #             '2021-01', '2021-02', '2021-03', '2021-04', '2021-05', '2021-06', '2021-07', '2021-08', '2021-09', '2021-10', '2021-11', '2021-12',
+    #             '2022-01', '2022-02', '2022-03', '2022-04', '2022-05', '2022-06', '2022-07', '2022-08', '2022-09', '2022-10', '2022-11', '2022-12',
+    #             '2023-01', '2023-02', '2023-03', '2023-04', '2023-05', '2023-06', '2023-07', '2023-08', '2023-09', '2023-10', '2023-11', '2023-12']
     
-    for month in months:
-        print(f"Processing {month}")
-        test_paths = os.path.join(dataset_folder, f"{month}", "features.pkl")
-        save_path = os.path.join(save_folder, f"{month}.pkl")
-        process_and_save(test_paths, vec, selected_feature_names, save_path)
+    # for month in months:
+    #     print(f"Processing {month}")
+    #     test_paths = os.path.join(dataset_folder, f"{month}", "features.pkl")
+    #     save_path = os.path.join(save_folder, f"{month}.pkl")
+    #     process_and_save(test_paths, vec, selected_feature_names, save_path)
 
-    # check
-    # load train data
-    with open(os.path.join(save_folder, f'train_data.pkl'), 'rb') as f:
-        train_data = pickle.load(f)
-    print(f"train data shape: {train_data['X'].shape}, {train_data['y'].shape}, {train_data['env'].shape}, {train_data['t'].shape}")
-    # load val data
-    with open(os.path.join(save_folder, f'val_data.pkl'), 'rb') as f:
-        val_data = pickle.load(f)
-    print(f"val data shape: {val_data['X'].shape}, {val_data['y'].shape}, {val_data['env'].shape}, {val_data['t'].shape}")
-    # load test data
-    with open(os.path.join(save_folder, f'2021-03.pkl'), 'rb') as f:
-        test_data = pickle.load(f)
-    print(f"test data shape: {test_data['X'].shape}, {test_data['y'].shape}, {test_data['env'].shape}, {test_data['t'].shape}")
+    # # check
+    # # load train data
+    # with open(os.path.join(save_folder, f'train_data.pkl'), 'rb') as f:
+    #     train_data = pickle.load(f)
+    # print(f"train data shape: {train_data['X'].shape}, {train_data['y'].shape}, {train_data['env'].shape}, {train_data['t'].shape}")
+    # # load val data
+    # with open(os.path.join(save_folder, f'val_data.pkl'), 'rb') as f:
+    #     val_data = pickle.load(f)
+    # print(f"val data shape: {val_data['X'].shape}, {val_data['y'].shape}, {val_data['env'].shape}, {val_data['t'].shape}")
+    # # load test data
+    # with open(os.path.join(save_folder, f'2021-03.pkl'), 'rb') as f:
+    #     test_data = pickle.load(f)
+    # print(f"test data shape: {test_data['X'].shape}, {test_data['y'].shape}, {test_data['env'].shape}, {test_data['t'].shape}")
 
 
 if __name__ == '__main__':
-    # generate_selector()
+    generate_selector()
     # with open(os.path.join("/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/dataset/processed_features", f'2021-01.pkl'), 'rb') as f:
     #     test_data = pickle.load(f)
     # print(f"test data shape: {test_data['X'].shape}, {test_data['y'].shape}, {test_data['env'].shape}, {test_data['t'].shape}")
     # load train data
-    with open(os.path.join(save_folder, f'train_data.pkl'), 'rb') as f:
-        train_data = pickle.load(f)
-    print(f"train data shape: {train_data['X'].shape}, {train_data['y'].shape}, {train_data['env'].shape}, {train_data['t'].shape}")
-    print(f"distribution of train data: {Counter(train_data['y']), Counter(train_data['env'])}")
-    # load val data
-    with open(os.path.join(save_folder, f'val_data.pkl'), 'rb') as f:
-        val_data = pickle.load(f)
-    print(f"val data shape: {val_data['X'].shape}, {val_data['y'].shape}, {val_data['env'].shape}, {val_data['t'].shape}")
-    print(f"distribution of val data: {Counter(val_data['y']), Counter(val_data['env'])}")
-    # load test data
-    with open(os.path.join(save_folder, f'2021-03.pkl'), 'rb') as f:
-        test_data = pickle.load(f)
-    print(f"test data shape: {test_data['X'].shape}, {test_data['y'].shape}, {test_data['env'].shape}, {test_data['t'].shape}")
-    print(f"distribution of test data: {Counter(test_data['y']), Counter(test_data['env'])}")
+    # with open(os.path.join(save_folder, f'train_data.pkl'), 'rb') as f:
+    #     train_data = pickle.load(f)
+    # print(f"train data shape: {train_data['X'].shape}, {train_data['y'].shape}, {train_data['env'].shape}, {train_data['t'].shape}")
+    # print(f"distribution of train data: {Counter(train_data['y']), Counter(train_data['env'])}")
+    # # load val data
+    # with open(os.path.join(save_folder, f'val_data.pkl'), 'rb') as f:
+    #     val_data = pickle.load(f)
+    # print(f"val data shape: {val_data['X'].shape}, {val_data['y'].shape}, {val_data['env'].shape}, {val_data['t'].shape}")
+    # print(f"distribution of val data: {Counter(val_data['y']), Counter(val_data['env'])}")
+    # # load test data
+    # with open(os.path.join(save_folder, f'2021-03.pkl'), 'rb') as f:
+    #     test_data = pickle.load(f)
+    # print(f"test data shape: {test_data['X'].shape}, {test_data['y'].shape}, {test_data['env'].shape}, {test_data['t'].shape}")
+    # print(f"distribution of test data: {Counter(test_data['y']), Counter(test_data['env'])}")
 
 
 
