@@ -1,0 +1,6 @@
+x_data shape: (41562, 5814), y_data shape: (41562,), env_data shape: (41562,), t_data shape: (41562,)
+distribution of y_data: Counter({np.float64(0.0): 37228, np.float64(1.0): 4334}), distribution of env_data: Counter({np.int64(2): 14375, np.int64(1): 12018, np.int64(0): 7754, np.int64(3): 7415})
+x_data shape: (10391, 5814), y_data shape: (10391,), env_data shape: (10391,), t_data shape: (10391,)
+distribution of y_data: Counter({np.float64(0.0): 9308, np.float64(1.0): 1083}), distribution of env_data: Counter({np.int64(2): 3595, np.int64(1): 3041, np.int64(0): 1964, np.int64(3): 1791})
+keys: dict_keys(['X', 'y', 't', 'env', 'y_family'])
+X shape: (1809, 5814), y shape: (1809,), y distribution: Counter({np.float64(0.0): 1375, np.float64(1.0): 434}), env shape: (1809,)

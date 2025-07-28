@@ -170,7 +170,6 @@ class St1ModelTrainer:
                 self.best_f1 = val_metrics['f1']
                 model = self.model
             
-        
                 # if best_model_path:
                 #     os.remove(best_model_path)
                 # best_model_path = self.save_model(epoch, val_metrics)

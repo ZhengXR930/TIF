@@ -21,8 +21,8 @@ import argparse
 import time
 from sklearn.model_selection import train_test_split
 
-save_folder = "/Users/zhengxinran/Documents/S2LAB/dataset/tif/processed_features"
-dataset_folder = "/Users/zhengxinran/Documents/S2LAB/dataset/tif/combine_drebin"
+save_folder = "/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/dataset/processed_features"
+dataset_folder = "/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/dataset/drebin"
 
 if not os.path.exists(save_folder):
     os.makedirs(save_folder)
@@ -46,9 +46,17 @@ def process_and_save(file_path, vec, selected_feature_names, save_path):
     data = load_pickle_fast(file_path)
     X = data['json_features'].values
     y = np.array(data['label'])
+    y_family = np.array(data['family'])
     data['year-month'] = data['dex_date'].dt.to_period('M').astype(str)
     t = np.array(data['year-month'])
     env = np.zeros(len(y), dtype=int)
+
+    family_dict_path = '/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/dataset/combine_drebin/family_dict.json'
+    with open(family_dict_path, 'r') as f:
+        family_dict = json.load(f)
+    print(f"family_dict: {len(family_dict)}")
+    y_family_encoded = np.array([family_dict[family] for family in y_family])
+    print(f"y_family_encoded: {y_family_encoded.shape}")
 
     print(f"Processing: {file_path}, Shape: {len(X)}")
 
@@ -93,7 +101,7 @@ def process_and_save(file_path, vec, selected_feature_names, save_path):
     # os.makedirs(os.path.dirname(save_path), exist_ok=True)
 
     # Save data as pickle with sparse matrix
-    result = {'X': X_selected, 'y': y, 't': t, 'env': env}
+    result = {'X': X_selected, 'y': y, 't': t, 'env': env, 'y_family': y_family_encoded}
     with open(save_path, 'wb') as f:
         pickle.dump(result, f)
 
@@ -142,7 +150,7 @@ def get_feature_selector(method, X_train, y_train, n_features = 10000):
     elif method == 'randomforest':
         # Note: RandomForest might be slow with sparse matrices and high dimensions
         # Use SGDClassifier with log loss as alternative
-        model = RandomForestClassifier(n_estimators=100, max_depth=None, random_state=42)
+        model = RandomForestClassifier(n_estimators=100, max_depth=None, random_state=42,n_jobs=-1)
         model.fit(X_train, y_train)
         selector = SelectFromModel(model, max_features=n_features, prefit=True)
         end_time = time.time()
@@ -176,7 +184,16 @@ def generate_selector(method='randomforest', n_features=10000, batch_size=10000)
 
     X_train = df_train['json_features'].values
     y_train = df_train['label'].values
+    y_family = df_train['family'].values
     t_train = df_train['year-month'].values
+
+    family_dict_path = '/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/dataset/combine_drebin/family_dict.json'
+    with open(family_dict_path, 'r') as f:
+        family_dict = json.load(f)
+    print(f"family_dict: {len(family_dict)}")
+
+    y_family_encoded = np.array([family_dict[family] for family in y_family])
+    print(f"y_family_encoded: {y_family_encoded.shape}")
 
     # Create output directory
     os.makedirs(save_folder, exist_ok=True)
@@ -298,14 +315,14 @@ def generate_selector(method='randomforest', n_features=10000, batch_size=10000)
     year_month_train = np.array([datetime.strptime(t, "%Y-%m") for t in t_train])
     envs_train = (np.array([date.month for date in year_month_train]) - 1) // 3
     
-    X_train_split, X_val_split, y_train_split, y_val_split, envs_train_split, envs_val_split, t_train_split, t_val_split = train_test_split(
-        X_train_selected, y_train, envs_train, t_train, test_size=0.2, random_state=42, stratify=y_train
+    X_train_split, X_val_split, y_train_split, y_val_split, envs_train_split, envs_val_split, t_train_split, t_val_split, y_family_train_split, y_family_val_split = train_test_split(
+        X_train_selected, y_train, envs_train, t_train, y_family_encoded, test_size=0.2, random_state=42, stratify=y_train
     )
 
     with open(os.path.join(save_folder, f'train_data.pkl'), 'wb') as f:
-        pickle.dump({'X': X_train_split, 'y': y_train_split, 't': t_train_split, 'env': envs_train_split}, f)
+        pickle.dump({'X': X_train_split, 'y': y_train_split, 't': t_train_split, 'env': envs_train_split, 'y_family': y_family_train_split}, f)
     with open(os.path.join(save_folder, f'val_data.pkl'), 'wb') as f:
-        pickle.dump({'X': X_val_split, 'y': y_val_split, 't': t_val_split, 'env': envs_val_split}, f)
+        pickle.dump({'X': X_val_split, 'y': y_val_split, 't': t_val_split, 'env': envs_val_split, 'y_family': y_family_val_split}, f)
 
     months = ['2015-01', '2015-02', '2015-03', '2015-04', '2015-05', '2015-06', '2015-07', '2015-08', '2015-09', '2015-10', '2015-11', '2015-12',
                 '2016-01', '2016-02', '2016-03', '2016-04', '2016-05', '2016-06', '2016-07', '2016-08', '2016-09', '2016-10', '2016-11', '2016-12',
@@ -339,25 +356,25 @@ def generate_selector(method='randomforest', n_features=10000, batch_size=10000)
 
 
 if __name__ == '__main__':
-    generate_selector()
+    generate_selector(method='randomforest', n_features=10000, batch_size=10000)
     # with open(os.path.join("/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/dataset/processed_features", f'2021-01.pkl'), 'rb') as f:
     #     test_data = pickle.load(f)
     # print(f"test data shape: {test_data['X'].shape}, {test_data['y'].shape}, {test_data['env'].shape}, {test_data['t'].shape}")
     # load train data
-    # with open(os.path.join(save_folder, f'train_data.pkl'), 'rb') as f:
-    #     train_data = pickle.load(f)
-    # print(f"train data shape: {train_data['X'].shape}, {train_data['y'].shape}, {train_data['env'].shape}, {train_data['t'].shape}")
-    # print(f"distribution of train data: {Counter(train_data['y']), Counter(train_data['env'])}")
-    # # load val data
-    # with open(os.path.join(save_folder, f'val_data.pkl'), 'rb') as f:
-    #     val_data = pickle.load(f)
-    # print(f"val data shape: {val_data['X'].shape}, {val_data['y'].shape}, {val_data['env'].shape}, {val_data['t'].shape}")
-    # print(f"distribution of val data: {Counter(val_data['y']), Counter(val_data['env'])}")
-    # # load test data
-    # with open(os.path.join(save_folder, f'2021-03.pkl'), 'rb') as f:
-    #     test_data = pickle.load(f)
-    # print(f"test data shape: {test_data['X'].shape}, {test_data['y'].shape}, {test_data['env'].shape}, {test_data['t'].shape}")
-    # print(f"distribution of test data: {Counter(test_data['y']), Counter(test_data['env'])}")
+    with open(os.path.join(save_folder, f'train_data.pkl'), 'rb') as f:
+        train_data = pickle.load(f)
+    print(f"train data shape: {train_data['X'].shape}, {train_data['y'].shape}, {train_data['env'].shape}, {train_data['t'].shape}, {train_data['y_family'].shape}")
+    print(f"distribution of train data: {Counter(train_data['y']), Counter(train_data['env'])}")
+    # load val data
+    with open(os.path.join(save_folder, f'val_data.pkl'), 'rb') as f:
+        val_data = pickle.load(f)
+    print(f"val data shape: {val_data['X'].shape}, {val_data['y'].shape}, {val_data['env'].shape}, {val_data['t'].shape}, {val_data['y_family'].shape}")
+    print(f"distribution of val data: {Counter(val_data['y']), Counter(val_data['env'])}")
+    # load test data
+    with open(os.path.join(save_folder, f'2021-03.pkl'), 'rb') as f:
+        test_data = pickle.load(f)
+    print(f"test data shape: {test_data['X'].shape}, {test_data['y'].shape}, {test_data['env'].shape}, {test_data['t'].shape}, {test_data['y_family'].shape}")
+    print(f"distribution of test data: {Counter(test_data['y']), Counter(test_data['env'])}")
 
 
 
