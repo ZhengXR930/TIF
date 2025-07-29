@@ -419,6 +419,8 @@ def active_learning(trained_model_path, train_data_path, val_data_path, test_lis
         y_test_tensor = torch.tensor(y_test, dtype=torch.long).to('cuda').squeeze()
         env_test_tensor = torch.tensor(env_test, dtype=torch.long).to('cuda').squeeze()
 
+        print(f"load model from {best_model_path}")
+
         model = St1ModelTrainer.load_model(
             model_path=best_model_path,
             model_class=DrebinMLP_IRM,
