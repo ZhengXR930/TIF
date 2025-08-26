@@ -67,3 +67,5 @@ class DrebinMLP_IRM(nn.Module):
         x = self.mlp_model(x)
         x = self.pred(x)
         return x, feature
+
+

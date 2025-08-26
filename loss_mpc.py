@@ -105,7 +105,5 @@ class PALSoftWithInterMargin(nn.Module):
                self.lambda_margin * inter_mgn + \
                self.lambda_div * diversity_loss
         
-        # (可选打印信息)
-        # print(f"PAL={pal.item():.4f}, InterMargin={inter_mgn.item():.4f}, Diversity={diversity_loss.item():.4f}, Total={loss.item():.4f}")
-        
+
         return loss

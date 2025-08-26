@@ -276,13 +276,13 @@ def eval_tif(train_path, test_list, best_stg1_model_path, best_stg2_model_path=N
         trainer = St2ModelTrainer(
             model=model,
             device='cuda',
-            batch_size=256,
+            batch_size=512,
             learning_rate=0.0001,
             con_loss_weight=1.0,
             penalty_weight=0.01,
             save_dir=save_folder)
 
-        # trainer.reset_optimizer(learning_rate=0.0001)
+        trainer.reset_optimizer(learning_rate=0.0001)
         best_model_path = trainer.train(x_train, x_val, y_train, y_val, env_train, env_val, epochs=50)
         print(f"best model path: {best_model_path}")
     
@@ -649,22 +649,22 @@ if __name__ == "__main__":
     # eval_mpc_stage_2(train_path, test_list, best_model_path=best_model_path)
 
     # tif:overall (load stg1 first - reset optimizer - train stg2)
-    # best_stg1_model_path = "/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/ckpt/stage1_model_epoch59_lr0.0001_bs256.pt"
-    # best_stg2_model_path = None
-    # eval_tif(train_path, test_list, best_stg1_model_path, best_stg2_model_path)
-    trained_model_path = "/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/ckpt/stage1_model_epoch59_lr0.0001_bs256.pt"
-    train_path = "/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/dataset/processed_features/train_data.pkl"
-    val_path = "/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/dataset/processed_features/val_data.pkl"
-    test_list = ['2015-01','2015-02','2015-03','2015-04','2015-05','2015-06','2015-07','2015-08','2015-09','2015-10','2015-11','2015-12',
-                '2016-01','2016-02','2016-03','2016-04','2016-05','2016-06','2016-07','2016-08','2016-09','2016-10','2016-11','2016-12',
-                '2017-01','2017-02','2017-03','2017-04','2017-05','2017-06','2017-07','2017-08','2017-09','2017-10','2017-11','2017-12',
-                '2018-01','2018-02','2018-03','2018-04','2018-05','2018-06','2018-07','2018-08','2018-09','2018-10','2018-11','2018-12',
-                '2019-01','2019-02','2019-03','2019-04','2019-05','2019-06','2019-07','2019-08','2019-09','2019-10','2019-11','2019-12',
-                '2020-01','2020-02','2020-03','2020-04','2020-05','2020-06','2020-07','2020-08','2020-09','2020-10','2020-11','2020-12',
-                '2021-01','2021-02','2021-03','2021-04','2021-05','2021-06','2021-07','2021-08','2021-09','2021-10','2021-11','2021-12',
-                ]
-    # active_learning(trained_model_path, train_path, val_path, test_list, result_folder)
-    active_learning_probability(trained_model_path, train_path, val_path, test_list, result_folder)
+    best_stg1_model_path = "/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/ckpt/stage1_model_epoch59_lr0.0001_bs256.pt"
+    best_stg2_model_path = None
+    eval_tif(train_path, test_list, best_stg1_model_path, best_stg2_model_path)
+    # trained_model_path = "/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/ckpt/stage1_model_epoch59_lr0.0001_bs256.pt"
+    # train_path = "/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/dataset/processed_features/train_data.pkl"
+    # val_path = "/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/dataset/processed_features/val_data.pkl"
+    # test_list = ['2015-01','2015-02','2015-03','2015-04','2015-05','2015-06','2015-07','2015-08','2015-09','2015-10','2015-11','2015-12',
+    #             '2016-01','2016-02','2016-03','2016-04','2016-05','2016-06','2016-07','2016-08','2016-09','2016-10','2016-11','2016-12',
+    #             '2017-01','2017-02','2017-03','2017-04','2017-05','2017-06','2017-07','2017-08','2017-09','2017-10','2017-11','2017-12',
+    #             '2018-01','2018-02','2018-03','2018-04','2018-05','2018-06','2018-07','2018-08','2018-09','2018-10','2018-11','2018-12',
+    #             '2019-01','2019-02','2019-03','2019-04','2019-05','2019-06','2019-07','2019-08','2019-09','2019-10','2019-11','2019-12',
+    #             '2020-01','2020-02','2020-03','2020-04','2020-05','2020-06','2020-07','2020-08','2020-09','2020-10','2020-11','2020-12',
+    #             '2021-01','2021-02','2021-03','2021-04','2021-05','2021-06','2021-07','2021-08','2021-09','2021-10','2021-11','2021-12',
+    #             ]
+    # # active_learning(trained_model_path, train_path, val_path, test_list, result_folder)
+    # active_learning_probability(trained_model_path, train_path, val_path, test_list, result_folder)
 
 
 
