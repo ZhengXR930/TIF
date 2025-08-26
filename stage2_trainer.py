@@ -5,13 +5,13 @@ from sklearn.metrics import f1_score, precision_score, recall_score, accuracy_sc
 import numpy as np
 from datetime import datetime
 import os
-from loss import MPL
+from loss_mpc import MPC
 from torch.utils.data import Sampler
 from collections import Counter
 import torch.nn.functional as F
 from scipy import sparse
 from utils import BalancedEnvSampler
-from loss_mpc import PALSoftWithInterMargin
+from loss_mpc import MPC
 
 class Stg2CustomDataset(Dataset):
     def __init__(self, X, y, env):
@@ -47,7 +47,7 @@ class St2ModelTrainer:
             os.makedirs(save_dir)
         
         self.criterion = nn.CrossEntropyLoss()
-        self.custom_loss = PALSoftWithInterMargin(
+        self.custom_loss = MPC(
                 device=device,
                 input_dim=model.emb_dim,
                 embed_dim=128,

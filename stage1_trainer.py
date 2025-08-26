@@ -7,7 +7,7 @@ from datetime import datetime
 import os
 from collections import Counter
 from scipy import sparse
-from loss_mpc import PALSoftWithInterMargin
+from loss_mpc import MPC
 from utils import BalancedEnvSampler
 import pickle
 
@@ -44,7 +44,7 @@ class St1ModelTrainer:
             os.makedirs(save_dir)
         
         self.criterion = nn.CrossEntropyLoss()
-        self.custom_loss = PALSoftWithInterMargin(
+        self.custom_loss = MPC(
                 device=device,
                 input_dim=model.emb_dim,
                 embed_dim=128,
@@ -184,22 +184,3 @@ class St1ModelTrainer:
         model.load_state_dict(checkpoint['model_state_dict'])
         model = model.to(device)
         return model
-
-
-# if __name__ == '__main__':
-
-#     with open(os.path.join('/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/dataset/processed_features', f'train_data.pkl'), 'rb') as f:
-#         train_data = pickle.load(f)
-#     print(f"train data shape: {train_data['X'].shape}, {train_data['y'].shape}, {train_data['env'].shape}, {train_data['t'].shape}")
-#     print(f"distribution of train data: {Counter(train_data['y']), Counter(train_data['env'])}")
-
-#     dataset = Stg1CustomDataset(train_data['X'], train_data['y'], train_data['env'])  # 你的自定义数据集
-#     sampler = BalancedEnvSampler(dataset, batch_size=256)  # 用你改好的均衡采样器
-#     loader = DataLoader(dataset, batch_size=256, sampler=sampler)
-
-#     # 统计前 10 个 batch 的 env 分布
-#     for batch_idx, (x, y, envs) in enumerate(loader):
-#         env_counts = Counter(envs.tolist())
-#         print(f"Batch {batch_idx} env distribution: {dict(env_counts)}")
-#         if batch_idx == 9:
-#             break

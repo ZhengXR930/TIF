@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-class PALSoftWithInterMargin(nn.Module):
+class MPC(nn.Module):
     def __init__(self,
                  device,
                  input_dim=1000,
