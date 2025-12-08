@@ -32,19 +32,19 @@ class MPC(nn.Module):
         self.lambda_margin = lambda_margin
         self.lambda_div = lambda_div
         
-        # Proxies 参数
+        # Proxies 
         buf = torch.randn(self.C * self.K, embed_dim)
         self.proxies = nn.Parameter(F.normalize(buf, dim=1))
         
     def forward(self, x, labels):
-        # (1) 投影并归一化
+        # (1) normalize
         if self.proj:
             z = self.proj(x)            # [B, E]
             z = F.normalize(z, dim=1)
         else:
             z = F.normalize(x, dim=1)
         
-        # reshape proxies 为 [C, K, E]
+        # reshape proxies to [C, K, E]
         P = F.normalize(self.proxies, dim=1).view(self.C, self.K, -1)
         
         # (2) PAL Soft Loss
