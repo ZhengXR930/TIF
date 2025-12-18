@@ -101,7 +101,7 @@ class St1ModelTrainer:
         
         return metrics
     
-    def save_model(self, epoch, metrics,model):
+    def save_model(self, epoch, metrics, model):
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         filename = f'stage1_model_epoch{epoch}_lr{self.learning_rate}_bs{self.batch_size}.pt'
         path = os.path.join(self.save_dir, filename)
@@ -110,6 +110,8 @@ class St1ModelTrainer:
             'epoch': epoch,
             # 'model_state_dict': self.model.state_dict(),
             'model_state_dict': model.state_dict(),
+            # Save MPC proxy parameters so they can be reused in stage 2
+            'custom_loss_state_dict': self.custom_loss.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict(),
             'metrics': metrics,
         }, path)

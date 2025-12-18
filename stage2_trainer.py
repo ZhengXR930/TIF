@@ -33,7 +33,9 @@ class Stg2CustomDataset(Dataset):
  
 
 class St2ModelTrainer:
-    def __init__(self, model, device='cuda', batch_size=64, learning_rate=0.001, con_loss_weight=1.0, penalty_weight=1.0, save_dir='models'):
+    def __init__(self, model, device='cuda', batch_size=64, learning_rate=0.001,
+                 con_loss_weight=1.0, penalty_weight=1.0, save_dir='models',
+                 penalty_warmup_epochs=10, custom_loss_state_dict=None):
         self.device = device
         self.model = model.to(device)
         self.batch_size = batch_size
@@ -42,6 +44,7 @@ class St2ModelTrainer:
         self.best_f1 = 0
         self.penalty_weight = penalty_weight
         self.con_loss_weight = con_loss_weight
+        self.penalty_warmup_epochs = penalty_warmup_epochs
 
         if not os.path.exists(save_dir):
             os.makedirs(save_dir)
@@ -58,6 +61,9 @@ class St2ModelTrainer:
                 lambda_margin=0.05,
                 lambda_div=0.01
             ).to(device)
+        # If provided, reuse the MPC proxy parameters from a previous stage (e.g., stage 1)
+        if custom_loss_state_dict is not None:
+            self.custom_loss.load_state_dict(custom_loss_state_dict)
         self.optimizer = torch.optim.Adam(
             list(self.model.parameters()) + list(self.custom_loss.parameters()), lr=self.learning_rate
         )
@@ -111,13 +117,14 @@ class St2ModelTrainer:
         return metrics
     
     def save_model(self, epoch, metrics):
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         filename = f'stage2_model_epoch{epoch}_lr{self.learning_rate}_bs{self.batch_size}.pt'
         path = os.path.join(self.save_dir, filename)
         
         torch.save({
             'epoch': epoch,
             'model_state_dict': self.model.state_dict(),
+            # Save MPC proxy parameters so they can be reused when loading stage 2 checkpoints
+            'custom_loss_state_dict': self.custom_loss.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict(),
             'metrics': metrics,
         }, path)
@@ -144,8 +151,15 @@ class St2ModelTrainer:
         
         for epoch in range(epochs):
             self.model.train()
-            total_loss = 0
+            epoch_loss = 0.0
             step = 0
+
+            # Linearly warm up the effective penalty weight to avoid collapse
+            if self.penalty_warmup_epochs > 0:
+                warmup_factor = min(1.0, float(epoch + 1) / float(self.penalty_warmup_epochs))
+            else:
+                warmup_factor = 1.0
+            effective_penalty_weight = self.penalty_weight * warmup_factor
 
             for inputs, labels, env in train_loader:
                 inputs, labels, env = inputs.to(self.device), labels.to(self.device), env.to(self.device)
@@ -167,6 +181,7 @@ class St2ModelTrainer:
                         env_outputs = self.model.pred(self.model.mlp_model(env_features))
                         cls_loss = self.criterion(env_outputs, env_labels)
                         scale = env_scales[i]
+                        # Use the positive-class logit for the IRM penalty to keep its scale stable
                         penalty = self._compute_irm_penalty(env_outputs[:, 1], env_labels.float(), scale)
 
                         n = env_labels.size(0)
@@ -178,16 +193,22 @@ class St2ModelTrainer:
                 
                 if all_env_losses:
                     total_env_loss = torch.stack(all_env_losses).sum() / total_samples
-                    total_penalty = torch.stack(all_env_penalties).sum()
-                    total_loss = total_env_loss + self.penalty_weight * total_penalty + con_loss
+                    # Normalize penalty across environments to stabilize its scale
+                    total_penalty = torch.stack(all_env_penalties).mean()
+                    total_loss = total_env_loss + effective_penalty_weight * total_penalty + con_loss
 
                     total_loss.backward()
                     self.optimizer.step()
 
-                if step % interval == 0:
-                    print(f"Epoch {epoch+1}/{epochs}, Step {step}/{len(train_loader)}, "
-                        f"Cls Loss: {cls_loss.item():.4f}, Con Loss: {con_loss.item():.4f}, "
-                        f"IRM Penalty: weight {self.penalty_weight}, penalty {total_penalty.item():.4f}, Total Loss: {total_loss.item():.4f}")
+                    epoch_loss += total_loss.item()
+
+                    if step % interval == 0:
+                        print(
+                            f"Epoch {epoch+1}/{epochs}, Step {step}/{len(train_loader)}, "
+                            f"Cls Loss: {cls_loss.item():.4f}, Con Loss: {con_loss.item():.4f}, "
+                            f"IRM Penalty: weight {effective_penalty_weight}, penalty {total_penalty.item():.4f}, "
+                            f"Total Loss: {total_loss.item():.4f}"
+                        )
 
                 step += 1
  
@@ -196,7 +217,8 @@ class St2ModelTrainer:
             val_metrics = self.evaluate(val_loader)
             
             print(f"Epoch {epoch+1}/{epochs}")
-            print(f"Training - Loss: {total_loss.item()/len(train_loader):.4f}")
+            if step > 0:
+                print(f"Training - Loss: {epoch_loss/step:.4f}")
             print(f"Training Metrics: {train_metrics}")
             print(f"Validation Metrics: {val_metrics}")
             
@@ -212,8 +234,10 @@ class St2ModelTrainer:
 
     @staticmethod
     def load_model(model_path, model_class, input_size, device='cuda'):
-        checkpoint = torch.load(model_path, map_location=device, weights_only=True)
+        # Load full checkpoint so we can reuse both model and proxy (MPC) parameters
+        checkpoint = torch.load(model_path, map_location=device)
         model = model_class(input_size=input_size)
         model.load_state_dict(checkpoint['model_state_dict'])
         model = model.to(device)
-        return model
+        custom_loss_state_dict = checkpoint.get('custom_loss_state_dict', None)
+        return model, custom_loss_state_dict

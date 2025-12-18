@@ -1,6 +1,6 @@
 
 import sys
-sys.path.append('/root/malware/ELSA')
+sys.path.append('/cs/academic/phd3/xinrzhen/xinran/SaTML')
 from sklearn.metrics import f1_score, precision_score, recall_score,accuracy_score,confusion_matrix
 import logging
 import numpy as np
@@ -216,10 +216,10 @@ def eval_mpc_stage_2(train_path, test_list, best_model_path=None):
     
     else:
         print(f"load best model from {best_model_path}")
-        model = St2ModelTrainer.load_model(
-        model_path=best_model_path,
-        model_class=DrebinMLP_IRM,
-        input_size=input_size
+        model, custom_loss_state_dict = St2ModelTrainer.load_model(
+            model_path=best_model_path,
+            model_class=DrebinMLP_IRM,
+            input_size=input_size
         )
         trainer = St2ModelTrainer(
             model=model,
@@ -228,7 +228,9 @@ def eval_mpc_stage_2(train_path, test_list, best_model_path=None):
             learning_rate=0.0001,
             con_loss_weight=1.0,
             penalty_weight=0.01,
-            save_dir=save_folder)
+            save_dir=save_folder,
+            custom_loss_state_dict=custom_loss_state_dict
+        )
     
     val_dataset = Stg2CustomDataset(x_val, y_val, env_val)
     val_loader = DataLoader(val_dataset, batch_size=128, shuffle=False)
@@ -268,10 +270,11 @@ def eval_tif(train_path, test_list, best_stg1_model_path, best_stg2_model_path=N
     
     elif best_stg2_model_path is None:
         print(f"load best stg1 model from {best_stg1_model_path}")
-        model = St2ModelTrainer.load_model(
-        model_path=best_stg1_model_path,
-        model_class=DrebinMLP_IRM,
-        input_size=input_size
+        # Load both model weights and MPC proxy parameters from stage 1 checkpoint
+        model, custom_loss_state_dict = St2ModelTrainer.load_model(
+            model_path=best_stg1_model_path,
+            model_class=DrebinMLP_IRM,
+            input_size=input_size
         )
         trainer = St2ModelTrainer(
             model=model,
@@ -279,8 +282,10 @@ def eval_tif(train_path, test_list, best_stg1_model_path, best_stg2_model_path=N
             batch_size=256,
             learning_rate=0.001,
             con_loss_weight=1.0,
-            penalty_weight=0.01,
-            save_dir=save_folder)
+            penalty_weight=0.05,
+            save_dir=save_folder,
+            custom_loss_state_dict=custom_loss_state_dict
+        )
 
         trainer.reset_optimizer(learning_rate=0.0001)
         best_model_path = trainer.train(x_train, x_val, y_train, y_val, env_train, env_val, epochs=50)
@@ -289,10 +294,10 @@ def eval_tif(train_path, test_list, best_stg1_model_path, best_stg2_model_path=N
     elif best_stg2_model_path is not None:
 
         print(f"load best stg2 model from {best_stg2_model_path}")
-        model = St2ModelTrainer.load_model(
-        model_path=best_stg2_model_path,
-        model_class=DrebinMLP_IRM,
-        input_size=input_size
+        model, custom_loss_state_dict = St2ModelTrainer.load_model(
+            model_path=best_stg2_model_path,
+            model_class=DrebinMLP_IRM,
+            input_size=input_size
         )
         trainer = St2ModelTrainer(
             model=model,
@@ -301,7 +306,9 @@ def eval_tif(train_path, test_list, best_stg1_model_path, best_stg2_model_path=N
             learning_rate=0.0001,
             con_loss_weight=1.0,
             penalty_weight=0.01,
-            save_dir=save_folder)
+            save_dir=save_folder,
+            custom_loss_state_dict=custom_loss_state_dict
+        )
 
     val_dataset = Stg2CustomDataset(x_val, y_val, env_val)
     val_loader = DataLoader(val_dataset, batch_size=128, shuffle=False)
