@@ -649,14 +649,11 @@ def parse_args():
                         help='Mode to run. For tif: stage1, stage2, tif, mpc. For drebin: svm, deep, ts')
     
     # Paths
-    parser.add_argument('--data_folder', type=str,
-                        default='/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/dataset/processed_features_old/',
+    parser.add_argument('--data_folder', type=str, required=True,
                         help='Path to data folder')
-    parser.add_argument('--result_folder', type=str,
-                        default='/cs/academic/phd3/xinrzhen/xinran/SaTML/result_rf',
+    parser.add_argument('--result_folder', type=str, required=True,
                         help='Path to result folder')
-    parser.add_argument('--save_folder', type=str,
-                        default='/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/ckpt',
+    parser.add_argument('--save_folder', type=str, required=True,
                         help='Path to save checkpoints')
     
     # Model paths

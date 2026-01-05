@@ -2,11 +2,11 @@
 
 # Set parameters
 METHOD=tif
-MODE=stage1
+MODE=tif
 SEED=1
-DATA_FOLDER=/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/dataset/processed_features_old/
-RESULT_FOLDER=/cs/academic/phd3/xinrzhen/xinran/SaTML/result_rf
-SAVE_FOLDER=/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/ckpt
+PROCESSED_DATA_FOLDER=''
+RESULT_FOLDER=''
+SAVE_FOLDER=''
 DEVICE=cuda
 BATCH_SIZE=256
 EVAL_BATCH_SIZE=128
@@ -17,8 +17,8 @@ PENALTY_WEIGHT=0.05
 MPC_LOAD_MODE=full
 WEIGHT_DECAY=0
 BEST_MODEL_PATH=""
-BEST_STG1_MODEL_PATH=""
-BEST_STG2_MODEL_PATH=""
+BEST_STG1_MODEL_PATH="stage1_model.pt"
+BEST_STG2_MODEL_PATH="tif_model.pt"
 
 TS=$(date "+%Y%m%d_%H%M%S")
 LOG_FILE=logs/${METHOD}_${MODE}_seed${SEED}_${TS}.log
@@ -29,7 +29,7 @@ nohup python -u main.py \
             --method ${METHOD} \
             --mode ${MODE} \
             --seed ${SEED} \
-            --data_folder ${DATA_FOLDER} \
+            --data_folder ${PROCESSED_DATA_FOLDER} \
             --result_folder ${RESULT_FOLDER} \
             --save_folder ${SAVE_FOLDER} \
             --device ${DEVICE} \
