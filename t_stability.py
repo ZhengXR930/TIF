@@ -17,13 +17,13 @@ import pickle
 from sklearn.metrics import hinge_loss
 
 
-data_folder = "/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/dataset/processed_features"
+data_folder = "/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/dataset/processed_features_old"
 save_folder = "/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/ckpt"
 result_folder = "/cs/academic/phd3/xinrzhen/xinran/SaTML/results"
 
 
 def load_feature_names():
-    with open(os.path.join(save_folder, f'selected_features.txt'), 'r') as f:
+    with open(os.path.join(save_folder, f'selected_features_randomforest.txt'), 'r') as f:
         feature_names = f.read().splitlines()
 
     return feature_names
@@ -40,12 +40,17 @@ def creat_t_stability():
     x_train, x_val, y_train, y_val, t_train, t_val = train_test_split(x_data, y_data, t_data, test_size=0.2, random_state=0, stratify=y_data)
 
     date_array_dt = pd.to_datetime(t_train, errors='coerce')
-    date_series = pd.Series(date_array_dt)
-    groups = date_series.groupby(date_series.dt.month)
-
+    date_series = pd.Series(date_array_dt, index=range(len(date_array_dt)))
+    groups = date_series.groupby([date_series.dt.year, date_series.dt.month])
+    
+    # Get sorted time periods to ensure temporal order
+    time_periods = sorted(groups.groups.keys())
+    T = len(time_periods)
+    
+    if T == 0:
+        raise ValueError("No valid time periods found in the data")
 
     d = x_train.shape[1]
-    T = 12
 
     svm = LinearSVC(max_iter=10000)
     svm.fit(x_train, y_train)
@@ -54,9 +59,9 @@ def creat_t_stability():
 
     y_val_pred = svm.predict(x_val)
     accuracy = accuracy_score(y_val, y_val_pred)
-    f1 = f1_score(y_val, y_val_pred, average='macro')
-    precision = precision_score(y_val, y_val_pred, average='macro')
-    recall = recall_score(y_val, y_val_pred, average='macro')
+    f1 = f1_score(y_val, y_val_pred)
+    precision = precision_score(y_val, y_val_pred)
+    recall = recall_score(y_val, y_val_pred)
     print(f"Accuracy: {accuracy:.4f}, F1 Score: {f1:.4f}, Precision: {precision:.4f}, Recall: {recall:.4f}")
 
     # feature_names = load_feature_names(data_folder)
@@ -64,24 +69,34 @@ def creat_t_stability():
     M = np.zeros((d, T))
 
     col = 0
-    for name, group in groups:
+    # Iterate through sorted time periods to maintain temporal order
+    for (year, month) in time_periods:
+        group = groups.get_group((year, month))
         index = group.index.tolist()
         X = x_train[index]
         y_label = y_train[index]
         mask = y_label == 1
         X_malware = X[mask]
-        print(f"name: {name}, index shape: {len(index)}, X shape: {X.shape}, X_malware shape: {X_malware.shape}, y_label shape: {y_label.shape}")
+        print(f"Year: {year}, Month: {month}, index shape: {len(index)}, X shape: {X.shape}, X_malware shape: {X_malware.shape}, y_label shape: {y_label.shape}")
+        
+        # Fix: Always fill M matrix, even if no malware samples
+        # This ensures M matrix columns correspond to actual time periods
         if X_malware.shape[0] == 0:
-            continue
+            # Use zeros when no malware samples (alternative: could use mean of all samples in that period)
+            M[:, col] = 0.0
+            print(f"  Warning: No malware samples for {year}-{month:02d}, using zeros")
         else:
             M[:, col] = np.mean(X_malware, axis=0)
+        
         col += 1
 
-    print(f"M shape: {M.shape}")
+    print(f"M shape: {M.shape}, T={T}")
     
     slopes = np.zeros(d)
     for j in range(d):
         reg = LinearRegression()
+        # Fix: Use sequential time indices (0, 1, 2, ..., T-1) since we've ensured
+        # M matrix columns are in temporal order and all columns are filled
         reg.fit(np.arange(T).reshape(-1, 1), M[j, :])
         slopes[j] = reg.coef_[0]
 
@@ -210,7 +225,7 @@ def retrain_svm(ts_path):
     
     with open(ts_path, "rb") as f:
         t_stability_df = pickle.load(f)
-    train_path = os.path.join(data_folder, "all_train_features.pkl")
+    train_path = os.path.join(data_folder, "train_data.pkl")
     with open(train_path, 'rb') as f:
         data = pickle.load(f)
     print(f"keys: {data.keys()}")
@@ -226,7 +241,7 @@ def retrain_svm(ts_path):
 
     n_f = 200  # Number of unstable features to constrain
     r = 0.2  # Bound for the weights of unstable features
-    num_iterations = 3000
+    num_iterations = 5000
     eta_0 = 0.01
 
 

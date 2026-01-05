@@ -35,7 +35,8 @@ class Stg2CustomDataset(Dataset):
 class St2ModelTrainer:
     def __init__(self, model, device='cuda', batch_size=64, learning_rate=0.001,
                  con_loss_weight=1.0, penalty_weight=1.0, save_dir='models',
-                 penalty_warmup_epochs=10, custom_loss_state_dict=None):
+                 penalty_warmup_epochs=10, custom_loss_state_dict=None, mpc_load_mode='full',
+                 weight_decay=1e-4):
         self.device = device
         self.model = model.to(device)
         self.batch_size = batch_size
@@ -45,6 +46,7 @@ class St2ModelTrainer:
         self.penalty_weight = penalty_weight
         self.con_loss_weight = con_loss_weight
         self.penalty_warmup_epochs = penalty_warmup_epochs
+        self.weight_decay = weight_decay
 
         if not os.path.exists(save_dir):
             os.makedirs(save_dir)
@@ -62,17 +64,52 @@ class St2ModelTrainer:
                 lambda_div=0.01
             ).to(device)
         # If provided, reuse the MPC proxy parameters from a previous stage (e.g., stage 1)
+        # Option: 'full' (load all), 'proj_only' (load projection layer only, reinit proxies), 'none' (reinit all)
         if custom_loss_state_dict is not None:
-            self.custom_loss.load_state_dict(custom_loss_state_dict)
+            self._load_mpc_state(custom_loss_state_dict, load_mode=mpc_load_mode)
         self.optimizer = torch.optim.Adam(
-            list(self.model.parameters()) + list(self.custom_loss.parameters()), lr=self.learning_rate
+            list(self.model.parameters()) + list(self.custom_loss.parameters()), 
+            lr=self.learning_rate,
+            weight_decay=self.weight_decay
         )
+    
+    def _load_mpc_state(self, state_dict, load_mode='full'):
+        """
+        Load MPC state with different strategies.
+        
+        Args:
+            state_dict: State dict from checkpoint
+            load_mode: 
+                - 'full': Load all parameters (proj + proxies) - use when data distribution is similar
+                - 'proj_only': Load only projection layer, reinitialize proxies - use when data distribution differs
+                - 'none': Don't load, keep random initialization - use when starting fresh
+        """
+        if load_mode == 'full':
+            self.custom_loss.load_state_dict(state_dict)
+            print("Loaded MPC: full state (proj + proxies)")
+        elif load_mode == 'proj_only':
+            # Only load projection layer if it exists
+            if self.custom_loss.proj is not None:
+                proj_state = {k: v for k, v in state_dict.items() if k.startswith('proj')}
+                if proj_state:
+                    self.custom_loss.load_state_dict(proj_state, strict=False)
+                    print("Loaded MPC: projection layer only, proxies reinitialized")
+                else:
+                    print("Loaded MPC: no projection layer found, proxies reinitialized")
+            else:
+                print("Loaded MPC: no projection layer, proxies reinitialized")
+        elif load_mode == 'none':
+            print("Loaded MPC: none (keeping random initialization)")
+        else:
+            raise ValueError(f"Unknown load_mode: {load_mode}. Use 'full', 'proj_only', or 'none'")
     
     def reset_optimizer(self, learning_rate):
         self.optimizer = torch.optim.Adam(
-            list(self.model.parameters()) + list(self.custom_loss.parameters()), lr=learning_rate
+            list(self.model.parameters()) + list(self.custom_loss.parameters()), 
+            lr=learning_rate,
+            weight_decay=self.weight_decay
         )
-        print(f"reinitialize optimizer with learning rate {learning_rate}")
+        print(f"reinitialize optimizer with learning rate {learning_rate}, weight_decay {self.weight_decay}")
         
     def create_dataloaders(self, X_train, X_val, y_train, y_val,env_train,env_val):
         train_dataset = Stg2CustomDataset(X_train, y_train,env_train)
@@ -178,11 +215,12 @@ class St2ModelTrainer:
                     if mask.any():
                         env_labels = labels[mask]
                         env_features = features[mask]
-                        env_outputs = self.model.pred(self.model.mlp_model(env_features))
+                        # Get logits (before softmax) for classification loss
+                        env_logits = self.model.mlp_model(env_features)
+                        env_outputs = self.model.pred(env_logits)  # Apply softmax for classification
                         cls_loss = self.criterion(env_outputs, env_labels)
                         scale = env_scales[i]
-                        # Use the positive-class logit for the IRM penalty to keep its scale stable
-                        penalty = self._compute_irm_penalty(env_outputs[:, 1], env_labels.float(), scale)
+                        penalty = self._compute_irm_penalty(env_logits[:, 1], env_labels.float(), scale)
 
                         n = env_labels.size(0)
                         env_loss = cls_loss * n
@@ -206,7 +244,7 @@ class St2ModelTrainer:
                         print(
                             f"Epoch {epoch+1}/{epochs}, Step {step}/{len(train_loader)}, "
                             f"Cls Loss: {cls_loss.item():.4f}, Con Loss: {con_loss.item():.4f}, "
-                            f"IRM Penalty: weight {effective_penalty_weight}, penalty {total_penalty.item():.4f}, "
+                            f"IRM Penalty: weight {effective_penalty_weight:.2f}, penalty {total_penalty.item():.4f}, "
                             f"Total Loss: {total_loss.item():.4f}"
                         )
 
@@ -223,13 +261,25 @@ class St2ModelTrainer:
             print(f"Validation Metrics: {val_metrics}")
             
             
-            # Save best model
+            # Save best model based on validation F1 score
             if val_metrics['f1'] > self.best_f1:
                 self.best_f1 = val_metrics['f1']
                 if best_model_path:
                     os.remove(best_model_path)
                 best_model_path = self.save_model(epoch, val_metrics)
+                print(f"  -> Saved best model (val F1: {self.best_f1:.4f})")
+            elif best_model_path is None:
+                # Save first model if no model has been saved yet (safety measure)
+                best_model_path = self.save_model(epoch, val_metrics)
+                self.best_f1 = val_metrics['f1']
+                print(f"  -> Saved initial model (val F1: {self.best_f1:.4f})")
                 
+        if best_model_path is None:
+            # Fallback: save the last model if no model was saved (should not happen)
+            print("Warning: No model was saved during training, saving last model as fallback")
+            best_model_path = self.save_model(epochs - 1, val_metrics)
+        
+        print(f"\nTraining completed. Best validation F1: {self.best_f1:.4f}")
         return best_model_path
 
     @staticmethod
