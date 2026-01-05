@@ -8,7 +8,7 @@ malscan/
 latest_exp/
 figures/
 dataset_analysis.ipynb
-feature_analysis.ipynb
+feature_selection.ipynb
 process_elsa_dataset.ipynb
 test_label_check.ipynb
 logs/
