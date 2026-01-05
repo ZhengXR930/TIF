@@ -25,7 +25,7 @@ pip install torch numpy scikit-learn scipy tqdm pandas
 
 ## Quick Start
 
-### Using the Run Script (Recommended)
+### Using the Run Scrip
 
 Edit the variables at the top of `run_experiment.sh` and run:
 
@@ -61,7 +61,7 @@ tail -f logs/tif_stage1_seed1_YYYYMMDD_HHMMSS.log
 
 ### Quick Test
 + Download artifact
-+ load trained model `stage1_model.pt` and `tif_model.pt` for params: 
++ load trained model `stage1_model.pt` and `tif_model.pt`: 
 + set `PROCESSED_DATA_FOLDER` as the path of `processed_data.zip`
 + set `RESULT_FOLDER`
 + run `run_experiment.sh`
