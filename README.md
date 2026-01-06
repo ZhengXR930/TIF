@@ -106,7 +106,7 @@ python main.py --method tif --mode tif \
     --save_folder /path/to/checkpoints \
     --best_stg1_model_path /path/to/stage1_model.pt \
     --seed 1 \
-    --batch_size 256 \
+    --batch_size 512 \
     --learning_rate 0.0001 \
     --epochs 20
 ```
