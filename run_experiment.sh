@@ -4,9 +4,9 @@
 METHOD=tif
 MODE=tif
 SEED=1
-PROCESSED_DATA_FOLDER='/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/dataset/processed_features_old/'
-RESULT_FOLDER='/cs/academic/phd3/xinrzhen/xinran/SaTML/result_rf'
-SAVE_FOLDER='/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/ckpt'
+PROCESSED_DATA_FOLDER=''
+RESULT_FOLDER=''
+SAVE_FOLDER=''
 DEVICE=cuda
 BATCH_SIZE=512
 EVAL_BATCH_SIZE=128
@@ -17,7 +17,7 @@ PENALTY_WEIGHT=0.05
 MPC_LOAD_MODE=full
 WEIGHT_DECAY=0
 BEST_MODEL_PATH=""
-BEST_STG1_MODEL_PATH="/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/ckpt/stage1_model.pt"
+BEST_STG1_MODEL_PATH="stage1_model.pt"
 BEST_STG2_MODEL_PATH=""
 
 TS=$(date "+%Y%m%d_%H%M%S")
