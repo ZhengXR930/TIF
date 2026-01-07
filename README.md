@@ -163,9 +163,9 @@ python main.py --method drebin --mode ts \
   - For `drebin`: `svm`, `deep`, or `ts`
 
 ### Path Arguments
-- `--data_folder`: Path to data folder (default: `/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/dataset/processed_features_old/`)
-- `--result_folder`: Path to result folder (default: `/cs/academic/phd3/xinrzhen/xinran/SaTML/result_rf`)
-- `--save_folder`: Path to save checkpoints (default: `/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/ckpt`)
+- `--data_folder`: Path to data folder
+- `--result_folder`: Path to result folder
+- `--save_folder`: Path to save checkpoints
 
 ### Model Arguments
 - `--best_model_path`: Path to best model checkpoint (optional)

@@ -62,7 +62,7 @@ def eval_t_stability(test_list, data_folder, result_folder, save_folder, seed=1)
     results_f1 = []
     # results_f1.append(f1)
     with open(os.path.join(result_folder, f'ts_test_file_{i}.csv'), 'w') as f:
-        f.write("month,precision,recall,f1\n")
+        f.write("month,precision,recall,f1,aut\n")
     for month in test_list:
         file_path = os.path.join(data_folder, f"{month}.pkl")
         x_test, y_test, env_test = utils.load_single_month_data(file_path)
@@ -119,7 +119,7 @@ def eval_deepdrebin(train_path, val_path, test_list, data_folder, result_folder,
 
     monthly_results_path = os.path.join(result_folder, f'deep_test_file.csv')
     with open(monthly_results_path, 'w') as f:
-        f.write("month,precision,recall,f1\n")
+        f.write("month,precision,recall,f1,aut\n")
     results_f1 = []
     # results_f1.append(f1_val)
     for month in test_list:
@@ -181,7 +181,7 @@ def eval_mpc_stage_1(train_path, val_path, test_list, data_folder, result_folder
 
     monthly_results_path = os.path.join(result_folder, f'stage1_test_file.csv')
     with open(monthly_results_path, 'w') as f:
-        f.write("month,precision,recall,f1\n")
+        f.write("month,precision,recall,f1,aut\n")
     results_f1 = []
     # results_f1.append(f1_val)
     for month in test_list:
@@ -247,7 +247,7 @@ def eval_mpc_stage_2(train_path, val_path, test_list, data_folder, result_folder
 
     monthly_results_path = os.path.join(result_folder, f'stage2_test_file_{seed}.csv')
     with open(monthly_results_path, 'w') as f:
-        f.write("month,precision,recall,f1\n")
+        f.write("month,precision,recall,f1,aut\n")
     results_f1 = []
     # results_f1.append(f1_val)
     for month in test_list:
@@ -336,7 +336,7 @@ def eval_tif(train_path, val_path, test_list, data_folder, result_folder, save_f
 
     monthly_results_path = os.path.join(result_folder, f'tif_test_file.csv')
     with open(monthly_results_path, 'w') as f:
-        f.write("month,precision,recall,f1\n")
+        f.write("month,precision,recall,f1,aut\n")
     results_f1 = []
     # results_f1.append(f1_val)
     for month in test_list:
@@ -398,7 +398,7 @@ def eval_mpc(train_path, val_path, test_list, data_folder, result_folder, save_f
 
     monthly_results_path = os.path.join(result_folder, f'mpc_test_file.csv')
     with open(monthly_results_path, 'w') as f:
-        f.write("month,precision,recall,f1\n")
+        f.write("month,precision,recall,f1,aut\n")
     results_f1 = []
     # results_f1.append(f1_val)
     for month in test_list:
@@ -415,108 +415,6 @@ def eval_mpc(train_path, val_path, test_list, data_folder, result_folder, save_f
         with open(monthly_results_path, 'a') as f:
             f.write(f"{month},{precision},{recall},{f1},{m_aut}\n")
         print(f"test month: {month}, test metrics: {test_metrics}")   
-
-def active_learning(trained_model_path, train_data_path, val_data_path, test_list, result_folder, budget=100):
-
-    x_train, y_train, env_train, t_train = utils.load_train_overall(train_data_path)
-    x_val, y_val, env_val, t_val = utils.load_train_overall(val_data_path)
-    input_size = x_train.shape[1]
-
-    x_train = csr_matrix(x_train).todense()
-    y_train = csr_matrix(y_train).todense()
-    x_train_tensor = torch.tensor(x_train, dtype=torch.float32).to('cuda')
-    y_train_tensor = torch.tensor(y_train, dtype=torch.long).to('cuda').squeeze()
-    env_train_tensor = torch.tensor(env_train, dtype=torch.long).to('cuda').squeeze()
-
-    
-
-    monthly_results_path = os.path.join(result_folder, f'active_learning_test_file.csv')
-    with open(monthly_results_path, 'w') as f:
-        f.write("month,precision,recall,f1,update\n")
-
-    best_model_path = trained_model_path
-    for month in test_list:
-        update_flag = 1
-        file_path = os.path.join(data_folder, f"{month}.pkl")
-        x_test, y_test, env_test = utils.load_single_month_data(file_path)
-        env_test = np.full(len(y_test), 3, dtype=int)
-        
-        x_test = csr_matrix(x_test).todense()
-        x_test_tensor = torch.tensor(x_test, dtype=torch.float32).to('cuda')
-        y_test_tensor = torch.tensor(y_test, dtype=torch.long).to('cuda').squeeze()
-        env_test_tensor = torch.tensor(env_test, dtype=torch.long).to('cuda').squeeze()
-
-        print(f"load model from {best_model_path}")
-
-        model = St1ModelTrainer.load_model(
-            model_path=best_model_path,
-            model_class=DrebinMLP_IRM,
-            input_size=input_size
-            )
-        trainer = St1ModelTrainer(
-            model=model,
-            device='cuda',
-            batch_size=256,
-            learning_rate=0.0001,
-            con_loss_weight=1.0,
-            save_dir=save_folder)
-
-        test_dataset = Stg1CustomDataset(x_test, y_test, env_test)
-        test_loader = DataLoader(test_dataset, batch_size=128, shuffle=False)
-        test_metrics = trainer.evaluate(test_loader)
-        precision = test_metrics['precision']
-        recall = test_metrics['recall']
-        f1 = test_metrics['f1']
-        
-        if f1 > 0.9:
-            print(f"month: {month}, f1 score is already high enough, skip active learning")
-            update_flag = 0
-            with open(monthly_results_path, 'a') as f:
-                f.write(f"{month},{precision},{recall},{f1},{update_flag}\n")
-            continue
-
-        outputs, _ = model(x_test_tensor)
-        uncertainty = 1.0 - torch.max(outputs, dim=1).values
-        indices = torch.argsort(uncertainty, descending=True)[:budget]
-        # print(f"month: {month}, uncertainty: {uncertainty[indices]}")
-
-        x_test_tensor_selected = x_test_tensor[indices]
-        y_test_tensor_selected = y_test_tensor[indices]
-        env_test_tensor_selected = env_test_tensor[indices]
-
-        x_combined = torch.cat((x_train_tensor, x_test_tensor_selected), dim=0)
-        y_combined = torch.cat((y_train_tensor, y_test_tensor_selected), dim=0)
-        env_combined = torch.cat((env_train_tensor, env_test_tensor_selected), dim=0)
-
-        x_train_tensor = x_combined
-        y_train_tensor = y_combined
-        env_train_tensor = env_combined
-
-        x_train_np = x_train_tensor.cpu().numpy()
-        y_train_np = y_train_tensor.cpu().numpy()
-        env_train_np = env_train_tensor.cpu().numpy()
-        print(f"env distribution: {np.unique(env_train, return_counts=True)}")
-        print(f"env distribution: {np.unique(env_train_np, return_counts=True)}")
-
-        x_train_np_new, x_val_np, y_train_np_new, y_val_np, env_train_np_new, env_val_np = train_test_split(
-            x_train_np, y_train_np, env_train_np,
-            test_size=0.2,
-            random_state=42,
-            stratify=y_train_np
-        )
-        
-        print(f"original train data shape: {y_train_tensor.shape}, new train data shape: {y_test_tensor_selected.shape}")
-        print(f"original test data shape: {x_test_tensor.shape}, selected test data shape: {x_test_tensor_selected.shape}")
-        print(f"original train data shape: {y_train_tensor.shape}, new train data shape: {y_combined.shape}")
-        print(f"env distribution: {np.unique(env_train_np, return_counts=True)}")
-
-        # break
-
-        best_model_path = trainer.train(x_train_np_new, x_val_np, y_train_np_new, y_val_np, env_train_np_new, env_val_np, epochs=30)
-        print(f"best model path: {best_model_path}")
-
-        with open(monthly_results_path, 'a') as f:
-            f.write(f"{month},{precision},{recall},{f1},{update_flag}\n")
 
 
 
