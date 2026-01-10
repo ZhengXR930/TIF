@@ -85,9 +85,9 @@ class ModelTrainer:
                 all_labels.extend(labels.numpy())
 
         accuracy = accuracy_score(all_labels, all_preds)
-        precision = precision_score(all_labels, all_preds, average='macro')
-        recall = recall_score(all_labels, all_preds, average='macro')
-        f1 = f1_score(all_labels, all_preds, average='macro')
+        precision = precision_score(all_labels, all_preds, zero_division=0)
+        recall = recall_score(all_labels, all_preds, zero_division=0)
+        f1 = f1_score(all_labels, all_preds, zero_division=0)
         
         metrics = {
             'accuracy': accuracy,

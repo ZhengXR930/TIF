@@ -2,20 +2,24 @@
 
 # Set parameters
 METHOD=tif
-MODE=tif
+MODE=tif  # Options: stage1, stage2, tif
 SEED=1
 PROCESSED_DATA_FOLDER=''
 RESULT_FOLDER=''
 SAVE_FOLDER=''
 DEVICE=cuda
-BATCH_SIZE=512
+BATCH_SIZE=512  # Default: 512 for stage1, 1024 for stage2/tif
 EVAL_BATCH_SIZE=128
 LEARNING_RATE=0.0001
-EPOCHS=10
-CON_LOSS_WEIGHT=1.0
-PENALTY_WEIGHT=0.05
+EPOCHS=30  # Default: 30 for stage1, 20 for stage2/tif
+CON_LOSS_WEIGHT=1.0  # Default: 1.0 for stage1, 0.1 for stage2/tif
+PENALTY_WEIGHT=1.0  # Default: 1.0 for stage2/tif
 MPC_LOAD_MODE=full
-WEIGHT_DECAY=0
+WEIGHT_DECAY=0  # Default: 1e-4 for stage1, 1e-3 for stage2/tif
+USE_MULTI_PROXY=true  # Default: true for stage1
+STAGE1_N_PROXY=3
+STAGE2_N_PROXY=3
+EARLY_STOP_PATIENCE=100  # Default: 100 for stage1, 5 for stage2/tif
 BEST_MODEL_PATH=""
 BEST_STG1_MODEL_PATH="stage1_model.pt"
 BEST_STG2_MODEL_PATH=""
@@ -41,6 +45,10 @@ nohup python -u main.py \
             --penalty_weight ${PENALTY_WEIGHT} \
             --mpc_load_mode ${MPC_LOAD_MODE} \
             --weight_decay ${WEIGHT_DECAY} \
+            ${USE_MULTI_PROXY:+--use_multi_proxy} \
+            --stage1_n_proxy ${STAGE1_N_PROXY} \
+            --stage2_n_proxy ${STAGE2_N_PROXY} \
+            --early_stop_patience ${EARLY_STOP_PATIENCE} \
             ${BEST_MODEL_PATH:+--best_model_path ${BEST_MODEL_PATH}} \
             ${BEST_STG1_MODEL_PATH:+--best_stg1_model_path ${BEST_STG1_MODEL_PATH}} \
             ${BEST_STG2_MODEL_PATH:+--best_stg2_model_path ${BEST_STG2_MODEL_PATH}} \

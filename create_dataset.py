@@ -21,8 +21,8 @@ import time
 from sklearn.model_selection import train_test_split
 import argparse
 
-save_folder = ""
-dataset_folder = ""
+save_folder = "/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/dataset/processed_features_new"
+dataset_folder = "/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/dataset/drebin_new"
 
 if not os.path.exists(save_folder):
     os.makedirs(save_folder)
@@ -86,7 +86,7 @@ def load_data_from_file(file_path):
             vt_scan_dates = pd.to_datetime(data['vt_scan_date'])
             t = np.array([pd.to_datetime(d).to_period('M').strftime('%Y-%m') if pd.notna(d) else 'unknown' for d in vt_scan_dates])
         else:
-            data['year-month'] = data['dex_date'].dt.to_period('M').astype(str)
+            data['year-month'] = data['date'].dt.to_period('M').astype(str)
             t = np.array(data['year-month'])
         
         env = np.zeros(len(y), dtype=int)
@@ -115,7 +115,7 @@ def process_single_file(file_path, vec, selected_feature_names, save_path, famil
     
     # Load family dictionary
     if family_dict_path is None:
-        family_dict_path = 'family_dict.json'
+        family_dict_path = '/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/dataset/combine_drebin/family_dict.json'
     
     if os.path.exists(family_dict_path):
         with open(family_dict_path, 'r') as f:
@@ -183,7 +183,7 @@ def load_training_set(sample_size=None):
             df_train.append(data)
     
     df_train = pd.concat(df_train)
-    df_train['year-month'] = df_train['dex_date'].dt.to_period('M').astype(str)
+    df_train['year-month'] = df_train['date'].dt.to_period('M').astype(str)
     print(f"Total training samples: {df_train.shape[0]}")
 
     return df_train
@@ -236,7 +236,7 @@ def get_feature_selector(method, X_train, y_train, n_features=10000):
 
 def process_dataset(mode='regenerate', method='randomforest', n_features=10000, batch_size=10000, 
                    feature_list_file=None, vectorizer_file=None, input_files=None, output_folder=None,
-                   rf_params=None, predefined_features_file=None, process_train_val=True, test_list=None):
+                   predefined_features_file=None, process_train_val=True, test_list=None):
     """
     Unified function to process dataset with multiple modes:
     
@@ -264,7 +264,6 @@ def process_dataset(mode='regenerate', method='randomforest', n_features=10000, 
         vectorizer_file: Path to vectorizer pkl file (for process/predefine/regenerate modes)
         input_files: List of input file paths (for process mode)
         output_folder: Output folder for processed files
-        rf_params: Random Forest parameters (for regenerate mode)
         predefined_features_file: Path to external feature list file (for predefine mode, required)
         process_train_val: Whether to process train/val sets in regenerate mode (default: True)
         test_list: List of test months to process (e.g., ['2015-01', '2015-02']) or None for all months
@@ -276,7 +275,7 @@ def process_dataset(mode='regenerate', method='randomforest', n_features=10000, 
             raise ValueError("input_files is required for process mode")
         return _process_with_existing_features(feature_list_file, vectorizer_file, input_files, output_folder)
     elif mode == 'regenerate':
-        return _process_regenerate_mode(method, n_features, batch_size, rf_params, vectorizer_file, output_folder, process_train_val, test_list)
+        return _process_regenerate_mode(method, n_features, batch_size, vectorizer_file, output_folder, process_train_val, test_list)
     elif mode == 'predefine':
         if predefined_features_file is None:
             raise ValueError("predefined_features_file is required for predefine mode")
@@ -343,7 +342,7 @@ def _process_with_existing_features(feature_list_file, vectorizer_file, input_fi
     return vec, selected_feature_names
 
 def _process_regenerate_mode(method='randomforest', n_features=10000, batch_size=10000, 
-                             rf_params=None, vectorizer_file=None, output_folder=None, 
+                             vectorizer_file=None, output_folder=None, 
                              process_train_val=True, test_list=None):
     """
     Regenerate mode: Extract features using different selector, then process train/val/test sets.
@@ -353,7 +352,6 @@ def _process_regenerate_mode(method='randomforest', n_features=10000, batch_size
         method: Feature selection method
         n_features: Number of features to select
         batch_size: Batch size for processing
-        rf_params: Random Forest parameters
         vectorizer_file: Path to existing vectorizer (optional, creates new if not provided)
         output_folder: Output folder for processed files
         process_train_val: Whether to process and save train/val sets (default: True)
@@ -423,10 +421,8 @@ def _process_regenerate_mode(method='randomforest', n_features=10000, batch_size
     
     # Train NEW selector with specified method
     print(f"Training NEW selector using method: {method}...")
-    if rf_params and method == 'randomforest':
-        print(f"Random Forest parameters: {rf_params}")
     
-    selector = get_feature_selector(method, X_train_vectorized, y_train, n_features, rf_params)
+    selector = get_feature_selector(method, X_train_vectorized, y_train, n_features)
     
     # Get selected features
     if hasattr(selector, 'get_support'):
@@ -456,7 +452,7 @@ def _process_regenerate_mode(method='randomforest', n_features=10000, batch_size
         y_family = df_train['family'].values
         t_train = df_train['year-month'].values
         
-        family_dict_path = 'family_dict.json'
+        family_dict_path = '/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/dataset/combine_drebin/family_dict.json'
         with open(family_dict_path, 'r') as f:
             family_dict = json.load(f)
         y_family_encoded = np.array([family_dict[family] for family in y_family])
@@ -581,7 +577,7 @@ def _process_predefine_mode(predefined_features_file, vectorizer_file=None, outp
     y_family = df_train['family'].values
     t_train = df_train['year-month'].values
     
-    family_dict_path = 'family_dict.json'
+    family_dict_path = '/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/dataset/combine_drebin/family_dict.json'
     with open(family_dict_path, 'r') as f:
         family_dict = json.load(f)
     y_family_encoded = np.array([family_dict[family] for family in y_family])
@@ -654,14 +650,6 @@ def _get_all_test_months():
     return months
 
 def process_all_months(vec=None, selected_feature_names=None, method='randomforest'):
-    """
-    Process all months (2015-2025) using existing vectorizer and selected features.
-    
-    Args:
-        vec: Optional vectorizer object (if None, loads from file)
-        selected_feature_names: Optional list of selected feature names (if None, loads from file)
-        method: Method name for loading files (default: 'randomforest')
-    """
     # Load vectorizer and features if not provided
     if vec is None or selected_feature_names is None:
         selected_features_path = os.path.join(save_folder, f'selected_features_{method}.txt')
@@ -696,12 +684,12 @@ def process_all_months(vec=None, selected_feature_names=None, method='randomfore
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Process dataset with different modes')
-    parser.add_argument('--mode', type=str, default='predefine',
+    parser.add_argument('--mode', type=str, default='regenerate',
                         choices=['process', 'regenerate', 'predefine'],
                         help='Processing mode')
     
     # Common arguments
-    parser.add_argument('--output_folder', type=str,
+    parser.add_argument('--output_folder', type=str, default='/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/dataset/processed_features_new',
                         help='Output folder for processed files')
     parser.add_argument('--batch_size', type=int, default=10000,
                         help='Batch size for processing large datasets')

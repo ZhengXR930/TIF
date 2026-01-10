@@ -17,7 +17,7 @@ import pickle
 from sklearn.metrics import hinge_loss
 
 
-data_folder = "/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/dataset/processed_features_old"
+data_folder = "/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/dataset/processed_features_new"
 save_folder = "/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/ckpt"
 result_folder = "/cs/academic/phd3/xinrzhen/xinran/SaTML/results"
 

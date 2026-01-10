@@ -141,7 +141,17 @@ def eval_deepdrebin(train_path, val_path, test_list, data_folder, result_folder,
 
 def eval_mpc_stage_1(train_path, val_path, test_list, data_folder, result_folder, save_folder,
                       best_model_path=None, device='cuda', batch_size=256, learning_rate=0.0001, 
-                      con_loss_weight=1.0, epochs=100, eval_batch_size=128):
+                      con_loss_weight=1.0, epochs=30, eval_batch_size=128,
+                      use_multi_proxy=True, n_proxy=3, weight_decay=1e-4, 
+                      proxy_lr_multiplier=1.0, use_scheduler=False, early_stop_patience=100):
+    """
+    Evaluate Stage 1 model with optional multi-proxy support.
+    
+    Args:
+        use_multi_proxy: If True, each environment learns its own proxy (paper setting)
+        n_proxy: Number of proxies per class
+        Other parameters: standard training parameters
+    """
     x_train, y_train, env_train, t_train = utils.load_train_overall(train_path)
     x_val, y_val, env_val, t_val = utils.load_train_overall(val_path)
     input_size = x_train.shape[1]
@@ -154,25 +164,42 @@ def eval_mpc_stage_1(train_path, val_path, test_list, data_folder, result_folder
             batch_size=batch_size,
             learning_rate=learning_rate,
             con_loss_weight=con_loss_weight,
-            save_dir=save_folder)
+            save_dir=save_folder,
+            use_multi_proxy=use_multi_proxy,
+            n_proxy=n_proxy,
+            weight_decay=weight_decay,
+            proxy_lr_multiplier=proxy_lr_multiplier,
+            use_scheduler=use_scheduler,
+            early_stop_patience=early_stop_patience)
 
         best_model_path = trainer.train(x_train, x_val, y_train, y_val, env_train, env_val, epochs=epochs)
         print(f"best model path: {best_model_path}")
     
     else:
         print(f"load best model from {best_model_path}")
-        model = St1ModelTrainer.load_model(
-        model_path=best_model_path,
-        model_class=DrebinMLP_IRM,
-        input_size=input_size
+        result = St1ModelTrainer.load_model(
+            model_path=best_model_path,
+            model_class=DrebinMLP_IRM,
+            input_size=input_size
         )
+        if len(result) == 2 and result[1] is not None:
+            # Multi-proxy checkpoint
+            model, env_losses = result
+            use_multi_proxy = True
+        else:
+            # Single-proxy checkpoint
+            model = result[0] if isinstance(result, tuple) else result
+            env_losses = None
+            use_multi_proxy = False
+        
         trainer = St1ModelTrainer(
             model=model,
             device=device,
             batch_size=batch_size,
             learning_rate=learning_rate,
             con_loss_weight=con_loss_weight,
-            save_dir=save_folder)
+            save_dir=save_folder,
+            use_multi_proxy=use_multi_proxy)
     
     val_dataset = Stg1CustomDataset(x_val, y_val, env_val)
     val_loader = DataLoader(val_dataset, batch_size=eval_batch_size, shuffle=False)
@@ -180,6 +207,9 @@ def eval_mpc_stage_1(train_path, val_path, test_list, data_folder, result_folder
     f1_val = val_metrics['f1']
 
     monthly_results_path = os.path.join(result_folder, f'stage1_test_file.csv')
+    if use_multi_proxy:
+        monthly_results_path = os.path.join(result_folder, f'stage1_multi_proxy_test_file.csv')
+    
     with open(monthly_results_path, 'w') as f:
         f.write("month,precision,recall,f1,aut\n")
     results_f1 = []
@@ -197,7 +227,7 @@ def eval_mpc_stage_1(train_path, val_path, test_list, data_folder, result_folder
         m_aut = tm.aut(results_f1)
         with open(monthly_results_path, 'a') as f:
             f.write(f"{month},{precision},{recall},{f1},{m_aut}\n")
-        print(f"test month: {month}, test metrics: {test_metrics}")
+        print(f"test month: {month}, test metrics: {test_metrics}, AUT: {m_aut:.4f}")
 
 
 def eval_mpc_stage_2(train_path, val_path, test_list, data_folder, result_folder, save_folder,
@@ -223,11 +253,16 @@ def eval_mpc_stage_2(train_path, val_path, test_list, data_folder, result_folder
     
     else:
         print(f"load best model from {best_model_path}")
-        model, custom_loss_state_dict = St2ModelTrainer.load_model(
+        result = St2ModelTrainer.load_model(
             model_path=best_model_path,
             model_class=DrebinMLP_IRM,
             input_size=input_size
         )
+        if len(result) == 3:
+            model, custom_loss_state_dict, n_proxy = result
+        else:
+            model, custom_loss_state_dict = result
+            n_proxy = None
         trainer = St2ModelTrainer(
             model=model,
             device=device,
@@ -236,13 +271,13 @@ def eval_mpc_stage_2(train_path, val_path, test_list, data_folder, result_folder
             con_loss_weight=con_loss_weight,
             penalty_weight=penalty_weight,
             save_dir=save_folder,
-            custom_loss_state_dict=custom_loss_state_dict
+            custom_loss_state_dict=custom_loss_state_dict,
+            n_proxy=n_proxy if n_proxy is not None else 5
         )
     
     val_dataset = Stg2CustomDataset(x_val, y_val, env_val)
     val_loader = DataLoader(val_dataset, batch_size=eval_batch_size, shuffle=False)
     val_metrics = trainer.evaluate(val_loader)
-    f1_val = val_metrics['f1']
 
 
     monthly_results_path = os.path.join(result_folder, f'stage2_test_file_{seed}.csv')
@@ -267,56 +302,30 @@ def eval_mpc_stage_2(train_path, val_path, test_list, data_folder, result_folder
 
 
 def eval_tif(train_path, val_path, test_list, data_folder, result_folder, save_folder,
-             best_stg1_model_path, best_stg2_model_path=None, device='cuda', batch_size=256, 
-             learning_rate=0.0001, con_loss_weight=1.0, penalty_weight=0.05, epochs=20, 
-             eval_batch_size=128, mpc_load_mode='full', weight_decay=0):
+             best_stg1_model_path=None, best_stg2_model_path=None, device='cuda', batch_size=1024, 
+             learning_rate=0.0001, con_loss_weight=0.1, penalty_weight=1.0, epochs=20, 
+             eval_batch_size=128, mpc_load_mode='full', weight_decay=1e-3, 
+             stage1_n_proxy=3, stage2_n_proxy=3,
+             early_stop_patience=5):
     x_train, y_train, env_train, t_train = utils.load_train_overall(train_path)
     x_val, y_val, env_val, t_val = utils.load_train_overall(val_path)
 
     input_size = x_train.shape[1]
 
-    if best_stg1_model_path is None:
-        print("train stage 1 model doesn't exist!!")
-        return
-    
-    elif best_stg2_model_path is None:
-        print(f"load best stg1 model from {best_stg1_model_path}")
-        # Load both model weights and MPC proxy parameters from stage 1 checkpoint
-        model, custom_loss_state_dict = St2ModelTrainer.load_model(
-            model_path=best_stg1_model_path,
-            model_class=DrebinMLP_IRM,
-            input_size=input_size
-        )
-        # MPC loading strategy:
-        # - 'full': Load all (proj + proxies) - use when TIF data distribution is similar to stage1
-        # - 'proj_only': Load only projection layer, reinit proxies - use when distributions differ
-        # - 'none': Don't load, reinit all - use when starting fresh or distributions very different
-        
-        trainer = St2ModelTrainer(
-            model=model,
-            device=device,
-            batch_size=batch_size,
-            learning_rate=learning_rate * 10,  # Initial LR for stage 2
-            con_loss_weight=con_loss_weight,
-            penalty_weight=penalty_weight,
-            save_dir=save_folder,
-            custom_loss_state_dict=custom_loss_state_dict,
-            mpc_load_mode=mpc_load_mode,
-            weight_decay=weight_decay
-        )
-
-        trainer.reset_optimizer(learning_rate=learning_rate)
-        best_model_path = trainer.train(x_train, x_val, y_train, y_val, env_train, env_val, epochs=epochs)
-        print(f"best model path: {best_model_path}")
-    
-    elif best_stg2_model_path is not None:
-
+    # If best_stg2_model_path is provided, we can skip stage1 and directly load stage2 for inference
+    if best_stg2_model_path is not None:
         print(f"load best stg2 model from {best_stg2_model_path}")
-        model, custom_loss_state_dict = St2ModelTrainer.load_model(
+        result = St2ModelTrainer.load_model(
             model_path=best_stg2_model_path,
             model_class=DrebinMLP_IRM,
-            input_size=input_size
+            input_size=input_size,
+            device=device
         )
+        if len(result) == 3:
+            model, custom_loss_state_dict, n_proxy = result
+        else:
+            model, custom_loss_state_dict = result
+            n_proxy = None
         trainer = St2ModelTrainer(
             model=model,
             device=device,
@@ -327,18 +336,63 @@ def eval_tif(train_path, val_path, test_list, data_folder, result_folder, save_f
             save_dir=save_folder,
             custom_loss_state_dict=custom_loss_state_dict
         )
+    
+    elif best_stg1_model_path is None:
+        print("Error: Either best_stg1_model_path or best_stg2_model_path must be provided!")
+        return
+    
+    elif best_stg2_model_path is None:
+        print(f"load best stg1 model from {best_stg1_model_path}")
+        # Load both model weights and MPC proxy parameters from stage 1 checkpoint
+        result = St2ModelTrainer.load_model(
+            model_path=best_stg1_model_path,
+            model_class=DrebinMLP_IRM,
+            input_size=input_size
+        )
+        if len(result) == 3:
+            model, custom_loss_state_dict, stg1_n_proxy = result
+        else:
+            model, custom_loss_state_dict = result
+            stg1_n_proxy = None
+        
+        # MPC loading strategy:
+        # - 'full': Load all (proj + proxies) - use when TIF data distribution is similar to stage1
+        # - 'proj_only': Load only projection layer, reinit proxies - use when distributions differ
+        # - 'none': Don't load, reinit all - use when starting fresh or distributions very different
+        # Note: If stage1 and stage2 have different n_proxy, use 'proj_only' or 'none'
+        if stg1_n_proxy is not None and stg1_n_proxy != stage2_n_proxy:
+            if mpc_load_mode == 'full':
+                print(f"Warning: Stage1 n_proxy={stg1_n_proxy} != Stage2 n_proxy={stage2_n_proxy}")
+                print("Switching to 'proj_only' mode to avoid proxy count mismatch")
+                mpc_load_mode = 'proj_only'
+        
+        trainer = St2ModelTrainer(
+            model=model,
+            device=device,
+            batch_size=batch_size,
+            learning_rate=learning_rate,  
+            con_loss_weight=con_loss_weight,
+            penalty_weight=penalty_weight,
+            save_dir=save_folder,
+            custom_loss_state_dict=custom_loss_state_dict,
+            mpc_load_mode=mpc_load_mode,
+            weight_decay=weight_decay,
+            n_proxy=stage2_n_proxy
+        )
+
+        trainer.reset_optimizer(learning_rate=learning_rate)
+        best_model_path = trainer.train(x_train, x_val, y_train, y_val, env_train, env_val, epochs=epochs)
+        print(f"best model path: {best_model_path}")
 
     val_dataset = Stg2CustomDataset(x_val, y_val, env_val)
     val_loader = DataLoader(val_dataset, batch_size=eval_batch_size, shuffle=False)
     val_metrics = trainer.evaluate(val_loader)
-    f1_val = val_metrics['f1']
 
 
-    monthly_results_path = os.path.join(result_folder, f'tif_test_file.csv')
+    monthly_results_path = os.path.join(result_folder, f'tif_test_file_{seed}.csv')
     with open(monthly_results_path, 'w') as f:
         f.write("month,precision,recall,f1,aut\n")
     results_f1 = []
-    # results_f1.append(f1_val)
     for month in test_list:
         file_path = os.path.join(data_folder, f"{month}.pkl")
         x_test, y_test, env_test = utils.load_single_month_data(file_path)
@@ -394,7 +448,6 @@ def eval_mpc(train_path, val_path, test_list, data_folder, result_folder, save_f
     val_dataset = CustomDataset(x_val, y_val)
     val_loader = DataLoader(val_dataset, batch_size=eval_batch_size, shuffle=False)
     val_metrics = trainer.evaluate(val_loader)
-    f1_val = val_metrics['f1']
 
     monthly_results_path = os.path.join(result_folder, f'mpc_test_file.csv')
     with open(monthly_results_path, 'w') as f:
@@ -463,13 +516,21 @@ def parse_args():
     # TIF-specific parameters
     parser.add_argument('--con_loss_weight', type=float, default=1.0,
                         help='Contrastive loss weight')
-    parser.add_argument('--penalty_weight', type=float, default=0.05,
-                        help='Penalty weight for stage 2')
+    parser.add_argument('--penalty_weight', type=float, default=1.0,
+                        help='Penalty weight for stage 2 (default: 1.0)')
     parser.add_argument('--mpc_load_mode', type=str, default='full',
-                        choices=['full', 'proj_only', 'none'],
+                        choices=['full', 'proj_only', 'none', 'auto'],
                         help='MPC loading mode for TIF')
     parser.add_argument('--weight_decay', type=float, default=0,
-                        help='Weight decay for optimizer')
+                        help='Weight decay for optimizer (default: 0 for stage1, 1e-3 for stage2/tif)')
+    parser.add_argument('--use_multi_proxy', action='store_true', default=True,
+                        help='Use multi-proxy mode for Stage 1 (default: True, each environment learns its own proxy)')
+    parser.add_argument('--stage1_n_proxy', type=int, default=3,
+                        help='Number of proxies per class in Stage 1 (default: 3)')
+    parser.add_argument('--stage2_n_proxy', type=int, default=3,
+                        help='Number of proxies per class in Stage 2 (default: 3)')
+    parser.add_argument('--early_stop_patience', type=int, default=100,
+                        help='Early stopping patience (default: 100 for stage1, 5 for stage2/tif)')
     
     # Test list (can be provided as comma-separated string or use default)
     parser.add_argument('--test_list', type=str, default=None,
@@ -533,6 +594,7 @@ if __name__ == "__main__":
     # Run based on method and mode
     if args.method == 'tif':
         if args.mode == 'stage1':
+            # Stage 1 defaults: use_multi_proxy=True, weight_decay=1e-4, con_loss_weight=1.0, epochs=30, n_proxy=3, early_stop_patience=100
             eval_mpc_stage_1(
                 train_path=train_path,
                 val_path=val_path,
@@ -545,8 +607,14 @@ if __name__ == "__main__":
                 batch_size=args.batch_size,
                 learning_rate=args.learning_rate,
                 con_loss_weight=args.con_loss_weight,
-                epochs=args.epochs,
-                eval_batch_size=args.eval_batch_size
+                epochs=30 if args.epochs == 100 else args.epochs,  # Default 30 for stage1
+                eval_batch_size=args.eval_batch_size,
+                use_multi_proxy=args.use_multi_proxy,
+                n_proxy=args.stage1_n_proxy,
+                weight_decay=1e-4 if args.weight_decay == 0 else args.weight_decay,  # Default 1e-4 for stage1
+                proxy_lr_multiplier=1.0,
+                use_scheduler=False,
+                early_stop_patience=100 if args.early_stop_patience == 5 else args.early_stop_patience  # Default 100 for stage1
             )
         elif args.mode == 'stage2':
             eval_mpc_stage_2(
@@ -567,8 +635,11 @@ if __name__ == "__main__":
                 seed=args.seed
             )
         elif args.mode == 'tif':
-            if args.best_stg1_model_path is None:
-                raise ValueError("--best_stg1_model_path is required for tif mode")
+            # For TIF mode, either best_stg1_model_path or best_stg2_model_path must be provided
+            # If best_stg2_model_path is provided, we can skip stage1 and directly load stage2 for inference
+            if args.best_stg1_model_path is None and args.best_stg2_model_path is None:
+                raise ValueError("Either --best_stg1_model_path or --best_stg2_model_path is required for tif mode")
+            # Stage 2/TIF defaults: con_loss_weight=0.1, penalty_weight=1.0, epochs=20, weight_decay=1e-3, batch_size=1024, n_proxy=3
             eval_tif(
                 train_path=train_path,
                 val_path=val_path,
@@ -579,14 +650,17 @@ if __name__ == "__main__":
                 best_stg1_model_path=args.best_stg1_model_path,
                 best_stg2_model_path=args.best_stg2_model_path,
                 device=args.device,
-                batch_size=args.batch_size,
+                batch_size=args.batch_size,  # Default 1024 for stage2
                 learning_rate=args.learning_rate,
-                con_loss_weight=args.con_loss_weight,
-                penalty_weight=args.penalty_weight,
-                epochs=args.epochs,
+                con_loss_weight=args.con_loss_weight,  # Default 0.1 for stage2
+                penalty_weight=args.penalty_weight,  # Default 1.0
+                epochs=args.epochs,  # Default 20 for stage2
                 eval_batch_size=args.eval_batch_size,
                 mpc_load_mode=args.mpc_load_mode,
-                weight_decay=args.weight_decay
+                weight_decay=args.weight_decay,  # Default 1e-3 for stage2
+                stage1_n_proxy=args.stage1_n_proxy,  # Default 3
+                stage2_n_proxy=args.stage2_n_proxy,  # Default 3
+                early_stop_patience=args.early_stop_patience  # Default 5 for stage2
             )
         elif args.mode == 'mpc':
             eval_mpc(

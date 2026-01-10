@@ -80,7 +80,7 @@ python main.py --method tif --mode stage1 \
     --result_folder /path/to/results \
     --save_folder /path/to/checkpoints \
     --seed 1 \
-    --batch_size 256 \
+    --batch_size 512 \
     --learning_rate 0.0001 \
     --epochs 100
 ```
