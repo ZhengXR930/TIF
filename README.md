@@ -25,6 +25,14 @@ pip install torch numpy scikit-learn scipy tqdm pandas
 
 ## Quick Start
 
+
+### Download Artifact
+[Download Here](https://drive.google.com/drive/folders/1xLXi_9En2yHRrybY_SL0RoTvwP3Q_iR1?usp=sharing)
+
++ Download artifact
++ Set `PROCESSED_DATA_FOLDER` as the path of `processed_features.zip`
++ Set `RESULT_FOLDER` and `SAVE_FOLDER` in `run_experiment.sh`
+
 ### Using the Run Script
 
 Edit the variables at the top of `run_experiment.sh` and run:
@@ -75,14 +83,6 @@ Monitor the log:
 tail -f logs/tif_tif_seed1_YYYYMMDD_HHMMSS.log
 ```
 
-### Download Artifact
-[Download Here](https://drive.google.com/drive/folders/1xLXi_9En2yHRrybY_SL0RoTvwP3Q_iR1?usp=sharing)
-
-### Quick Test
-+ Download artifact
-+ Set `PROCESSED_DATA_FOLDER` as the path of `processed_features.zip`
-+ Set `RESULT_FOLDER` and `SAVE_FOLDER` in `run_experiment.sh`
-+ Run `./run_experiment.sh` 
 
 
 ### Using Command Line Interface
