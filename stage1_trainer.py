@@ -3,13 +3,11 @@ from torch import nn
 from torch.utils.data import Dataset, DataLoader
 from sklearn.metrics import f1_score, precision_score, recall_score, accuracy_score
 import numpy as np
-from datetime import datetime
 import os
-from collections import Counter
 from scipy import sparse
 from loss_mpc import MPC
 from utils import BalancedEnvSampler
-import pickle
+
 
 class Stg1CustomDataset(Dataset):
     def __init__(self, X, y, env):
@@ -65,12 +63,11 @@ class St1ModelTrainer:
         self.criterion = nn.CrossEntropyLoss()
         
         if use_multi_proxy:
-            # Multi-proxy mode: will be initialized in train() when we know num_envs
-            self.custom_losses = None  # Dictionary: {env_id: MPC_loss_instance}
+            # multi-proxy mode for each environment
+            self.custom_losses = None 
             self.custom_loss = None
             self.scheduler = None
         else:
-            # Single-proxy mode: backward compatible
             self.custom_loss = MPC(
                 device=device,
                 input_dim=model.emb_dim,
@@ -193,12 +190,10 @@ class St1ModelTrainer:
             torch.save({
                 'epoch': epoch,
                 'model_state_dict': model.state_dict(),
-                # Save all environment-specific MPC proxy parameters
                 'env_losses_state_dict': env_losses_state_dict,
                 'num_envs': self.num_envs,
                 'optimizer_state_dict': self.optimizer.state_dict(),
                 'metrics': metrics,
-                # Save hyperparameters for reconstruction
                 'embed_dim': self.embed_dim,
                 'num_classes': self.num_classes,
                 'n_proxy': self.n_proxy,

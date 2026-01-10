@@ -21,11 +21,11 @@ import time
 from sklearn.model_selection import train_test_split
 import argparse
 
-save_folder = "/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/dataset/processed_features_new"
+save_folder = "/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/dataset/processed_features_month"
 dataset_folder = "/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/dataset/drebin_new"
+family_dict_path = '/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/dataset/combine_drebin/family_dict.json'
 
-if not os.path.exists(save_folder):
-    os.makedirs(save_folder)
+os.makedirs(save_folder, exist_ok=True)
 
 def load_pickle_fast(path):
     return joblib.load(path)
@@ -37,6 +37,36 @@ def ensure_sparse(X):
     elif not isinstance(X, csr_matrix):
         X = csr_matrix(X)
     return X
+
+def compute_env_ids(t_train, env_split_mode='quarter', n_envs=4):
+    """
+    Compute environment IDs based on time stamps.
+    
+    Args:
+        t_train: Array of time strings in format "YYYY-MM"
+        env_split_mode: 'quarter' for quarterly split, 'month' for monthly split, or 'uniform' for uniform split
+        n_envs: Number of environments for uniform split (only used when env_split_mode='uniform')
+    
+    Returns:
+        Array of environment IDs
+    """
+    year_month_train = np.array([datetime.strptime(t, "%Y-%m") for t in t_train])
+    
+    if env_split_mode == 'quarter':
+        # Quarterly split: Q1 (0), Q2 (1), Q3 (2), Q4 (3)
+        envs = (np.array([date.month for date in year_month_train]) - 1) // 3
+    elif env_split_mode == 'month':
+        # Monthly split: Jan (0), Feb (1), ..., Dec (11)
+        envs = np.array([date.month for date in year_month_train]) - 1
+    elif env_split_mode == 'uniform':
+        # Uniform split: evenly divide samples into n_envs environments
+        n_samples = len(t_train)
+        # Assign each sample to an environment based on its index
+        envs = np.array([i % n_envs for i in range(n_samples)])
+    else:
+        raise ValueError(f"Unknown env_split_mode: {env_split_mode}. Use 'quarter', 'month', or 'uniform'")
+    
+    return envs
 
 def load_data_from_file(file_path):
     """Load and parse data from pickle file, handling different formats"""
@@ -96,7 +126,7 @@ def load_data_from_file(file_path):
     
     return {'X': X, 'y': y, 'y_family': y_family, 't': t, 'env': env}
 
-def process_single_file(file_path, vec, selected_feature_names, save_path, family_dict_path=None):
+def process_single_file(file_path, vec, selected_feature_names, save_path):
     """Process a single file using existing vectorizer and selected features"""
     if not os.path.exists(file_path):
         print(f"Warning: File not found: {file_path}")
@@ -113,9 +143,6 @@ def process_single_file(file_path, vec, selected_feature_names, save_path, famil
     t = data_dict['t']
     env = data_dict['env']
     
-    # Load family dictionary
-    if family_dict_path is None:
-        family_dict_path = '/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/dataset/combine_drebin/family_dict.json'
     
     if os.path.exists(family_dict_path):
         with open(family_dict_path, 'r') as f:
@@ -236,7 +263,7 @@ def get_feature_selector(method, X_train, y_train, n_features=10000):
 
 def process_dataset(mode='regenerate', method='randomforest', n_features=10000, batch_size=10000, 
                    feature_list_file=None, vectorizer_file=None, input_files=None, output_folder=None,
-                   predefined_features_file=None, process_train_val=True, test_list=None):
+                   predefined_features_file=None, process_train_val=True, test_list=None, env_split_mode='quarter', n_envs=4):
     """
     Unified function to process dataset with multiple modes:
     
@@ -275,11 +302,11 @@ def process_dataset(mode='regenerate', method='randomforest', n_features=10000, 
             raise ValueError("input_files is required for process mode")
         return _process_with_existing_features(feature_list_file, vectorizer_file, input_files, output_folder)
     elif mode == 'regenerate':
-        return _process_regenerate_mode(method, n_features, batch_size, vectorizer_file, output_folder, process_train_val, test_list)
+        return _process_regenerate_mode(method, n_features, batch_size, env_split_mode, n_envs, vectorizer_file, output_folder, process_train_val, test_list)
     elif mode == 'predefine':
         if predefined_features_file is None:
             raise ValueError("predefined_features_file is required for predefine mode")
-        return _process_predefine_mode(predefined_features_file, vectorizer_file, output_folder, batch_size, test_list)
+        return _process_predefine_mode(predefined_features_file, vectorizer_file, output_folder, batch_size, test_list, env_split_mode)
     else:
         raise ValueError(f"Unknown mode: {mode}. Must be 'process', 'regenerate', or 'predefine'")
 
@@ -341,7 +368,7 @@ def _process_with_existing_features(feature_list_file, vectorizer_file, input_fi
     
     return vec, selected_feature_names
 
-def _process_regenerate_mode(method='randomforest', n_features=10000, batch_size=10000, 
+def _process_regenerate_mode(method='randomforest', n_features=10000, batch_size=10000, env_split_mode='quarter', n_envs=4,
                              vectorizer_file=None, output_folder=None, 
                              process_train_val=True, test_list=None):
     """
@@ -452,7 +479,6 @@ def _process_regenerate_mode(method='randomforest', n_features=10000, batch_size
         y_family = df_train['family'].values
         t_train = df_train['year-month'].values
         
-        family_dict_path = '/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/dataset/combine_drebin/family_dict.json'
         with open(family_dict_path, 'r') as f:
             family_dict = json.load(f)
         y_family_encoded = np.array([family_dict[family] for family in y_family])
@@ -465,8 +491,7 @@ def _process_regenerate_mode(method='randomforest', n_features=10000, batch_size
         X_train_selected = ensure_sparse(X_train_selected)
         
         # Split into train/val
-        year_month_train = np.array([datetime.strptime(t, "%Y-%m") for t in t_train])
-        envs_train = (np.array([date.month for date in year_month_train]) - 1) // 3
+        envs_train = compute_env_ids(t_train, env_split_mode=env_split_mode, n_envs=n_envs)
         
         X_train_split, X_val_split, y_train_split, y_val_split, envs_train_split, envs_val_split, t_train_split, t_val_split, y_family_train_split, y_family_val_split = train_test_split(
             X_train_selected, y_train, envs_train, t_train, y_family_encoded, test_size=0.2, random_state=42, stratify=y_train
@@ -499,7 +524,7 @@ def _process_regenerate_mode(method='randomforest', n_features=10000, batch_size
     
     return vec, selected_feature_names
 
-def _process_predefine_mode(predefined_features_file, vectorizer_file=None, output_folder=None, batch_size=10000, test_list=None):
+def _process_predefine_mode(predefined_features_file, vectorizer_file=None, output_folder=None, batch_size=10000, test_list=None, env_split_mode='quarter', n_envs=4):
     """
     Predefine mode: Use external feature list, process train/val/test sets.
     Loads predefined feature list from external file, uses existing vectorizer (or creates new one),
@@ -577,7 +602,6 @@ def _process_predefine_mode(predefined_features_file, vectorizer_file=None, outp
     y_family = df_train['family'].values
     t_train = df_train['year-month'].values
     
-    family_dict_path = '/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/dataset/combine_drebin/family_dict.json'
     with open(family_dict_path, 'r') as f:
         family_dict = json.load(f)
     y_family_encoded = np.array([family_dict[family] for family in y_family])
@@ -605,8 +629,7 @@ def _process_predefine_mode(predefined_features_file, vectorizer_file=None, outp
     print(f"Selected features shape: {X_train_selected.shape}")
     
     # Split into train/val
-    year_month_train = np.array([datetime.strptime(t, "%Y-%m") for t in t_train])
-    envs_train = (np.array([date.month for date in year_month_train]) - 1) // 3
+    envs_train = compute_env_ids(t_train, env_split_mode=env_split_mode, n_envs=n_envs)
     
     X_train_split, X_val_split, y_train_split, y_val_split, envs_train_split, envs_val_split, t_train_split, t_val_split, y_family_train_split, y_family_val_split = train_test_split(
         X_train_selected, y_train, envs_train, t_train, y_family_encoded, test_size=0.2, random_state=42, stratify=y_train
@@ -718,6 +741,11 @@ if __name__ == '__main__':
     # Arguments for regenerate/predefine modes
     parser.add_argument('--test_list', type=str, default=None,
                         help='a list of test months')
+    parser.add_argument('--env_split_mode', type=str, default='quarter',
+                        choices=['quarter', 'month', 'uniform'],
+                        help='Environment split mode: "quarter" for quarterly split (Q1-Q4), "month" for monthly split (Jan-Dec), "uniform" for uniform split into n_envs environments. Default: quarter')
+    parser.add_argument('--n_envs', type=int, default=4,
+                        help='Number of environments for uniform split mode (only used when env_split_mode="uniform"). Default: 4')
     
     args = parser.parse_args()
     
@@ -752,7 +780,9 @@ if __name__ == '__main__':
             vectorizer_file=args.vectorizer_file,
             output_folder=args.output_folder,
             process_train_val=process_train_val,
-            test_list=test_list
+            test_list=test_list,
+            env_split_mode=args.env_split_mode,
+            n_envs=args.n_envs
         )
     elif args.mode == 'predefine':
         if args.predefined_features_file is None or args.vectorizer_file is None:
@@ -763,5 +793,7 @@ if __name__ == '__main__':
             vectorizer_file=args.vectorizer_file,
             output_folder=args.output_folder,
             batch_size=args.batch_size,
-            test_list=test_list
+            test_list=test_list,
+            env_split_mode=args.env_split_mode,
+            n_envs=args.n_envs
         )

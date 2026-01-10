@@ -2,27 +2,35 @@
 
 # Set parameters
 METHOD=tif
-MODE=tif  # Options: stage1, stage2, tif
+MODE=tif  
 SEED=1
-PROCESSED_DATA_FOLDER=''
-RESULT_FOLDER=''
-SAVE_FOLDER=''
+PROCESSED_DATA_FOLDER='/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/dataset/processed_features_new'
+RESULT_FOLDER='/cs/academic/phd3/xinrzhen/xinran/SaTML/result_rf'
+SAVE_FOLDER='/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/ckpt/new_features'
 DEVICE=cuda
-BATCH_SIZE=512  # Default: 512 for stage1, 1024 for stage2/tif
 EVAL_BATCH_SIZE=128
-LEARNING_RATE=0.0001
-EPOCHS=30  # Default: 30 for stage1, 20 for stage2/tif
-CON_LOSS_WEIGHT=1.0  # Default: 1.0 for stage1, 0.1 for stage2/tif
-PENALTY_WEIGHT=1.0  # Default: 1.0 for stage2/tif
-MPC_LOAD_MODE=full
-WEIGHT_DECAY=0  # Default: 1e-4 for stage1, 1e-3 for stage2/tif
-USE_MULTI_PROXY=true  # Default: true for stage1
+
+# Stage 1 parameters
+STAGE1_BATCH_SIZE=512
+STAGE1_LEARNING_RATE=0.0001
+STAGE1_CON_LOSS_WEIGHT=1.0
+STAGE1_WEIGHT_DECAY=1e-4
+STAGE1_EPOCHS=40
 STAGE1_N_PROXY=3
+STAGE1_EARLY_STOP_PATIENCE=100
+
+# Stage 2 parameters
+STAGE2_BATCH_SIZE=1024
+STAGE2_LEARNING_RATE=0.0001
+STAGE2_CON_LOSS_WEIGHT=0.1
+STAGE2_WEIGHT_DECAY=1e-3
+STAGE2_EPOCHS=20
 STAGE2_N_PROXY=3
-EARLY_STOP_PATIENCE=100  # Default: 100 for stage1, 5 for stage2/tif
-BEST_MODEL_PATH=""
-BEST_STG1_MODEL_PATH="stage1_model.pt"
-BEST_STG2_MODEL_PATH=""
+STAGE2_EARLY_STOP_PATIENCE=5
+
+# TIF-specific parameters
+PENALTY_WEIGHT=1.0
+MPC_LOAD_MODE=full
 
 TS=$(date "+%Y%m%d_%H%M%S")
 LOG_FILE=logs/${METHOD}_${MODE}_seed${SEED}_${TS}.log
@@ -37,21 +45,23 @@ nohup python -u main.py \
             --result_folder ${RESULT_FOLDER} \
             --save_folder ${SAVE_FOLDER} \
             --device ${DEVICE} \
-            --batch_size ${BATCH_SIZE} \
             --eval_batch_size ${EVAL_BATCH_SIZE} \
-            --learning_rate ${LEARNING_RATE} \
-            --epochs ${EPOCHS} \
-            --con_loss_weight ${CON_LOSS_WEIGHT} \
-            --penalty_weight ${PENALTY_WEIGHT} \
-            --mpc_load_mode ${MPC_LOAD_MODE} \
-            --weight_decay ${WEIGHT_DECAY} \
-            ${USE_MULTI_PROXY:+--use_multi_proxy} \
+            --stage1_batch_size ${STAGE1_BATCH_SIZE} \
+            --stage2_batch_size ${STAGE2_BATCH_SIZE} \
+            --stage1_learning_rate ${STAGE1_LEARNING_RATE} \
+            --stage2_learning_rate ${STAGE2_LEARNING_RATE} \
+            --stage1_con_loss_weight ${STAGE1_CON_LOSS_WEIGHT} \
+            --stage2_con_loss_weight ${STAGE2_CON_LOSS_WEIGHT} \
+            --stage1_weight_decay ${STAGE1_WEIGHT_DECAY} \
+            --stage2_weight_decay ${STAGE2_WEIGHT_DECAY} \
+            --stage1_epochs ${STAGE1_EPOCHS} \
+            --stage2_epochs ${STAGE2_EPOCHS} \
             --stage1_n_proxy ${STAGE1_N_PROXY} \
             --stage2_n_proxy ${STAGE2_N_PROXY} \
-            --early_stop_patience ${EARLY_STOP_PATIENCE} \
-            ${BEST_MODEL_PATH:+--best_model_path ${BEST_MODEL_PATH}} \
-            ${BEST_STG1_MODEL_PATH:+--best_stg1_model_path ${BEST_STG1_MODEL_PATH}} \
-            ${BEST_STG2_MODEL_PATH:+--best_stg2_model_path ${BEST_STG2_MODEL_PATH}} \
+            --stage1_early_stop_patience ${STAGE1_EARLY_STOP_PATIENCE} \
+            --stage2_early_stop_patience ${STAGE2_EARLY_STOP_PATIENCE} \
+            --penalty_weight ${PENALTY_WEIGHT} \
+            --mpc_load_mode ${MPC_LOAD_MODE} \
             >> ${LOG_FILE} 2>&1 &
 
 echo "Process started, PID: $!"

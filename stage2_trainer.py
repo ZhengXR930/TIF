@@ -112,7 +112,7 @@ class St2ModelTrainer:
                 print("Loaded MPC: no projection layer, proxies reinitialized")
             
             if 'proxies' in state_dict and n_proxy is not None:
-                self._smart_init_proxies(state_dict['proxies'], n_proxy)
+                self._init_proxies(state_dict['proxies'], n_proxy)
             return  # Finished loading in proj_only mode
         elif load_mode == 'none':
             print("Loaded MPC: none (keeping random initialization)")
@@ -120,42 +120,34 @@ class St2ModelTrainer:
         else:
             raise ValueError(f"Unknown load_mode: {load_mode}. Use 'full', 'proj_only', 'none', or 'auto'")
     
-    def _smart_init_proxies(self, loaded_proxies, target_n_proxy):
-        C = self.custom_loss.C  # num_classes
-        embed_dim = loaded_proxies.shape[1]  # Get from loaded_proxies shape
+    def _init_proxies(self, loaded_proxies, target_n_proxy):
+        C = self.custom_loss.C  
+        embed_dim = loaded_proxies.shape[1]  
         loaded_n_proxy = loaded_proxies.shape[0] // C
         
         if loaded_n_proxy == target_n_proxy:
-            # Same count, just copy
             self.custom_loss.proxies.data = loaded_proxies.clone()
             print(f"Loaded proxies: {loaded_n_proxy} proxies per class (same count)")
             return
         
-        # Reshape loaded proxies: [C, K1, embed_dim]
         loaded_proxies_reshaped = loaded_proxies.view(C, loaded_n_proxy, embed_dim)
         
-        # Initialize target proxies: [C, K2, embed_dim]
         target_proxies = torch.zeros(C, target_n_proxy, embed_dim, device=self.device)
         
         for c in range(C):
-            # Copy existing proxies
             target_proxies[c, :loaded_n_proxy] = loaded_proxies_reshaped[c]
             
-            # For additional proxies, use interpolation or add small noise
             if target_n_proxy > loaded_n_proxy:
-                # Method: Average of existing proxies + small random noise
                 mean_proxy = loaded_proxies_reshaped[c].mean(dim=0, keepdim=True)
                 noise_scale = 0.1
                 for k in range(loaded_n_proxy, target_n_proxy):
-                    # Interpolate between mean and one of the existing proxies
                     alpha = (k - loaded_n_proxy + 1) / (target_n_proxy - loaded_n_proxy + 1)
                     base_proxy = loaded_proxies_reshaped[c][k % loaded_n_proxy]
                     new_proxy = (1 - alpha) * base_proxy + alpha * mean_proxy.squeeze(0)
-                    # Add small noise
                     noise = torch.randn_like(new_proxy) * noise_scale
                     target_proxies[c, k] = new_proxy + noise
+                    # target_proxies[c, k] = new_proxy
         
-        # Normalize and assign
         target_proxies = target_proxies.view(C * target_n_proxy, embed_dim)
         target_proxies = torch.nn.functional.normalize(target_proxies, dim=1)
         self.custom_loss.proxies.data = target_proxies
@@ -218,7 +210,6 @@ class St2ModelTrainer:
         torch.save({
             'epoch': epoch,
             'model_state_dict': self.model.state_dict(),
-            # Save MPC proxy parameters so they can be reused when loading stage 2 checkpoints
             'custom_loss_state_dict': self.custom_loss.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict(),
             'metrics': metrics,
@@ -387,8 +378,6 @@ class St2ModelTrainer:
                     break
                 
         if best_model_path is None:
-            # Fallback: save the last model if no model was saved (should not happen)
-            print("Warning: No model was saved during training, saving last model as fallback")
             best_model_path = self.save_model(epochs - 1, val_metrics)
         
         print(f"\nTraining completed. Best validation F1: {self.best_f1:.4f}")
@@ -416,8 +405,7 @@ class St2ModelTrainer:
         custom_loss_state_dict = checkpoint.get('custom_loss_state_dict', None)
         n_proxy = None
         if custom_loss_state_dict is not None and 'proxies' in custom_loss_state_dict:
-            # Extract n_proxy from proxies shape: [C*K, embed_dim]
-            num_classes = 2  # Assuming binary classification
+            num_classes = 2  
             proxy_shape = custom_loss_state_dict['proxies'].shape
             n_proxy = proxy_shape[0] // num_classes
         
@@ -429,17 +417,14 @@ class St2ModelTrainer:
         env_ids = sorted(env_losses_state_dict.keys())
         num_envs = len(env_ids)
                 
-        # Get the first environment's state dict as template
         first_env_state = env_losses_state_dict[env_ids[0]]
         fused_state = {}
         
-        # Copy projection layer (same for all environments, represents learned feature transformation)
         for key, value in first_env_state.items():
             if key.startswith('proj'):
                 fused_state[key] = value.clone()
                 print(f"  Loaded {key} from environment {env_ids[0]}")
         
-        # Extract invariant proxies from all environments' knowledge
         if 'proxies' in first_env_state:
             all_proxies = []
             for env_id in env_ids:
@@ -451,7 +436,7 @@ class St2ModelTrainer:
             all_proxies = torch.stack(all_proxies, dim=0)
             
             fused_proxies = all_proxies.mean(dim=0)
-            print(f"  Extracted invariant proxies: mean (common center) of {num_envs} environments")
+            print(f"  Extracted invariant proxies: mean of {num_envs} environments")
             
             # Normalize to unit sphere
             fused_proxies = torch.nn.functional.normalize(fused_proxies, dim=1)
