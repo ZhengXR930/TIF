@@ -8,7 +8,7 @@ TIF consists of two stages:
 - **Stage 1**: Discriminative Information Amplification - enhances discriminative features across environments
 - **Stage 2**: Unstable Information Suppression - suppresses temporally unstable features
 
-The repository also includes baseline methods: SVM, DeepDrebin, T-Stability, and MPC (Multi-Proxy Contrastive loss).
+The repository also includes baseline methods: SVM, DeepDrebin, T-Stability.
 
 ## Installation
 
