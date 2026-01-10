@@ -21,9 +21,9 @@ import time
 from sklearn.model_selection import train_test_split
 import argparse
 
-save_folder = "/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/dataset/processed_features_month"
-dataset_folder = "/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/dataset/drebin_new"
-family_dict_path = '/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/dataset/combine_drebin/family_dict.json'
+save_folder = "processed_features"
+dataset_folder = "data"
+family_dict_path = 'family_dict.json'
 
 os.makedirs(save_folder, exist_ok=True)
 
@@ -712,7 +712,7 @@ if __name__ == '__main__':
                         help='Processing mode')
     
     # Common arguments
-    parser.add_argument('--output_folder', type=str, default='/scratch_NOT_BACKED_UP/NOT_BACKED_UP/xinran/dataset/processed_features_new',
+    parser.add_argument('--output_folder', type=str, default='processed_features',
                         help='Output folder for processed files')
     parser.add_argument('--batch_size', type=int, default=10000,
                         help='Batch size for processing large datasets')
