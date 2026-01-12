@@ -15,7 +15,7 @@ The repository also includes baseline methods: SVM, DeepDrebin, T-Stability.
 1. Clone this repository:
 ```bash
 git clone <repository-url>
-cd SaTML
+cd TIF
 ```
 
 2. Install dependencies:
